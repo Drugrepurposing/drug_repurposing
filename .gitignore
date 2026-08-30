@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Testing & Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Build Outputs
+dist/
+build/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
