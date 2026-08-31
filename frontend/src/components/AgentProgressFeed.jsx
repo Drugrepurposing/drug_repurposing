@@ -27,7 +27,8 @@ export default function AgentProgressFeed({ logs, isRunning }) {
         {logs.map((log, idx) => (
           <div
             key={idx}
-            className="p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start gap-2.5"
+            className="anim-log p-3 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start gap-2.5"
+            style={{ animationDelay: `${idx * 120}ms` }}
           >
             <div className="mt-0.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />

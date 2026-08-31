@@ -54,6 +54,18 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
 
     viewer.zoomTo();
     viewer.render();
+
+    // Slow continuous rotation, so the binding pocket reads as a 3D object
+    // rather than a still image. Guarded because it is optional polish.
+    try {
+      const reduceMotion = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduceMotion && typeof viewer.spin === 'function') {
+        viewer.spin('y', 0.4);
+      }
+    } catch {
+      // Never let the rotation break the viewer itself.
+    }
   }, [pdbContent, viewMode]);
 
   if (!candidate) return null;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, HelpCircle, ArrowRightLeft, CheckCircle2, Download, ThumbsUp, ThumbsDown, BookOpen, Sparkles } from 'lucide-react';
+import AnimatedPercent from './AnimatedPercent.jsx';
 
 export default function CandidateTable({ 
   candidates, 
@@ -64,8 +65,12 @@ export default function CandidateTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-              {candidates.map((cand) => (
-                <tr key={cand.id} className="hover:bg-slate-50/80 transition-colors">
+              {candidates.map((cand, rowIndex) => (
+                <tr
+                  key={cand.id}
+                  className="anim-rise hover:bg-slate-50/80 transition-colors"
+                  style={{ animationDelay: `${rowIndex * 70}ms` }}
+                >
                   {/* Rank */}
                   <td className="py-3.5 px-4 text-center">
                     <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
@@ -113,7 +118,7 @@ export default function CandidateTable({
 
                   {/* GNN Score */}
                   <td className="py-3.5 px-4 text-center font-mono font-semibold text-indigo-700">
-                    {(cand.gnn_dti_score * 100).toFixed(1)}%
+                    <AnimatedPercent value={cand.gnn_dti_score} delay={rowIndex * 70} />
                   </td>
 
                   {/* Docking ΔG */}
@@ -134,7 +139,7 @@ export default function CandidateTable({
                   {/* Overall Pareto Score */}
                   <td className="py-3.5 px-4 text-center font-mono">
                     <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold text-xs">
-                      {(cand.overall_score * 100).toFixed(1)}%
+                      <AnimatedPercent value={cand.overall_score} delay={rowIndex * 70} />
                     </span>
                   </td>
 
