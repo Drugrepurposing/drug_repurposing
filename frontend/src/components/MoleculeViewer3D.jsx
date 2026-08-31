@@ -59,8 +59,8 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
   if (!candidate) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-4xl rounded-xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
+      <div className="bg-surface w-full max-w-4xl rounded-xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -99,7 +99,7 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
               onClick={() => setViewMode('cartoon_stick')}
               className={`px-3 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
                 viewMode === 'cartoon_stick'
-                  ? 'bg-white text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
+                  ? 'bg-surface text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
                   : 'bg-transparent text-slate-600 border-transparent hover:text-slate-900'
               }`}
             >
@@ -109,7 +109,7 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
               onClick={() => setViewMode('surface')}
               className={`px-3 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
                 viewMode === 'surface'
-                  ? 'bg-white text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
+                  ? 'bg-surface text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
                   : 'bg-transparent text-slate-600 border-transparent hover:text-slate-900'
               }`}
             >
@@ -119,7 +119,7 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
               onClick={() => setViewMode('ball_stick')}
               className={`px-3 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
                 viewMode === 'ball_stick'
-                  ? 'bg-white text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
+                  ? 'bg-surface text-indigo-900 font-semibold border-indigo-300 shadow-2xs'
                   : 'bg-transparent text-slate-600 border-transparent hover:text-slate-900'
               }`}
             >
@@ -129,11 +129,11 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
         </div>
 
         {/* 3D WebGL Canvas */}
-        <div className="relative flex-1 min-h-[400px] bg-slate-900">
+        <div className="relative flex-1 min-h-[400px] bg-ink">
           {loading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/90 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/90 z-10">
               <div className="w-7 h-7 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-mono text-slate-300">Loading 3D PDB Coordinates...</span>
+              <span className="text-xs font-mono text-ink-soft">Loading 3D PDB Coordinates...</span>
             </div>
           )}
           <div ref={containerRef} className="w-full h-full min-h-[420px]" />

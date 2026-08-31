@@ -87,7 +87,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-indigo-600 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
       {/* Top Navbar */}
       <Navbar 
         activeTab={activeTab} 
@@ -126,7 +126,7 @@ export default function App() {
                           <button
                             key={idx}
                             onClick={() => handleSearch(sug)}
-                            className="px-3 py-1 rounded-full bg-white hover:bg-rose-100 text-rose-900 font-medium text-xs border border-rose-300 shadow-2xs transition-all cursor-pointer hover:scale-105"
+                            className="px-3 py-1 rounded-full bg-surface hover:bg-rose-100 text-rose-900 font-medium text-xs border border-rose-300 shadow-2xs transition-all cursor-pointer hover:scale-105"
                           >
                             {sug}
                           </button>
@@ -199,7 +199,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="py-6 border-t border-slate-200 bg-white text-slate-500 text-xs text-center">
+      <footer className="py-6 border-t border-slate-200 bg-surface text-slate-500 text-xs text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <p className="font-semibold text-slate-800">Autonomous Drug Repurposing Discovery Pipeline</p>

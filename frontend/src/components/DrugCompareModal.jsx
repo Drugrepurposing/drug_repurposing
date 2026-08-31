@@ -23,8 +23,8 @@ export default function DrugCompareModal({ candidate1, allCandidates, onClose })
   if (!candidate1) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-3xl rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
+      <div className="bg-surface w-full max-w-3xl rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -67,7 +67,7 @@ export default function DrugCompareModal({ candidate1, allCandidates, onClose })
                   const selected = allCandidates.find(c => c.id === e.target.value);
                   if (selected) setCandidate2(selected);
                 }}
-                className="bg-white text-slate-900 font-bold text-sm rounded-md p-1 border border-slate-300 w-full focus:outline-none text-center"
+                className="bg-surface text-slate-900 font-bold text-sm rounded-md p-1 border border-slate-300 w-full focus:outline-none text-center"
               >
                 {allCandidates.map(c => (
                   <option key={c.id} value={c.id} disabled={c.id === candidate1.id}>

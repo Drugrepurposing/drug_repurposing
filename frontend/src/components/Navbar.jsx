@@ -1,16 +1,20 @@
 import React from 'react';
-import { Dna, Activity, Info, Search } from 'lucide-react';
+import { Dna, Activity, Info, Search, Moon, Sun } from 'lucide-react';
+import { useTheme } from '../context/theme-context.js';
 
 export default function Navbar({ activeTab, setActiveTab, onNewSearchClick, isPipelineRunning }) {
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200">
+    <header className="sticky top-0 z-40 w-full bg-surface/90 backdrop-blur-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand Logo & Title */}
         <div 
           onClick={() => setActiveTab('home')}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm group-hover:bg-indigo-700 transition-colors">
+          <div className="w-9 h-9 rounded-lg bg-brand flex items-center justify-center text-white shadow-sm group-hover:bg-brand-hover transition-colors">
             <Dna className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -63,8 +67,18 @@ export default function Navbar({ activeTab, setActiveTab, onNewSearchClick, isPi
           </button>
 
           <button
+            onClick={toggleTheme}
+            title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-pressed={isDark}
+            className="ml-1 p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          <button
             onClick={onNewSearchClick}
-            className="ml-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            className="ml-1 px-3.5 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <Search className="w-3.5 h-3.5" />
             <span>New Search</span>

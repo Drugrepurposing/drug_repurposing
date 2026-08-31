@@ -43,28 +43,28 @@ export default function ResearchChatbot({ activeCandidate, activeDisease }) {
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
-          className="px-4 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs sm:text-sm shadow-md flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+          className="px-4 py-2.5 rounded-full bg-brand hover:bg-brand-hover text-white font-medium text-xs sm:text-sm shadow-md flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
         >
           <Bot className="w-4 h-4 text-white" />
           <span>Ask AI Assistant</span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         </button>
       ) : (
-        <div className="bg-white w-80 sm:w-96 rounded-xl border border-slate-300 shadow-xl overflow-hidden flex flex-col h-[450px]">
+        <div className="bg-surface w-80 sm:w-96 rounded-xl border border-slate-300 shadow-xl overflow-hidden flex flex-col h-[450px]">
           {/* Header */}
-          <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+          <div className="p-3 bg-ink text-white flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
                 <Bot className="w-4 h-4" />
               </div>
               <div>
                 <h4 className="font-bold text-xs sm:text-sm">Research Q&A Assistant</h4>
-                <p className="text-[10px] text-slate-300">Context: {activeCandidate?.name || 'Top Candidate'}</p>
+                <p className="text-[10px] text-ink-soft">Context: {activeCandidate?.name || 'Top Candidate'}</p>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              className="p-1 rounded text-ink-soft hover:text-white hover:bg-ink-2 cursor-pointer"
             >
               <ChevronDown className="w-4 h-4" />
             </button>
@@ -85,7 +85,7 @@ export default function ResearchChatbot({ activeCandidate, activeDisease }) {
                 <div
                   className={`p-2.5 rounded-lg max-w-[82%] leading-relaxed ${
                     m.sender === 'user'
-                      ? 'bg-indigo-600 text-white rounded-br-none font-medium'
+                      ? 'bg-brand text-white rounded-br-none font-medium'
                       : 'bg-slate-100 border border-slate-200 text-slate-800 rounded-bl-none font-sans'
                   }`}
                 >
@@ -148,12 +148,12 @@ export default function ResearchChatbot({ activeCandidate, activeDisease }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask follow-up question..."
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-lg px-3 py-1.5 border border-slate-300 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface text-slate-900 placeholder-slate-400 text-xs rounded-lg px-3 py-1.5 border border-slate-300 focus:outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
               disabled={loading || !query.trim()}
-              className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 cursor-pointer"
+              className="p-2 rounded-lg bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
