@@ -209,8 +209,31 @@ html.dark .clean-card-hover:hover {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================================
+   ENTRANCE ANIMATIONS
+
+   Short and purposeful. Each one marks something the pipeline actually did —
+   an agent reporting, a candidate being ranked — rather than decorating the
+   page. Nothing runs longer than 400ms: slow animation impresses once and
+   irritates by the third demo. The prefers-reduced-motion block above
+   neutralises every one of them, delays included.
+   ============================================================================ */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.anim-rise { animation: riseIn 380ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.anim-log  { animation: slideInLeft 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
