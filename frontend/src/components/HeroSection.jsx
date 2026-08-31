@@ -28,7 +28,7 @@ export default function HeroSection({ onSearch, isSearching }) {
   };
 
   return (
-    <section className="pt-10 pb-12 px-4 border-b border-slate-200/80 bg-white">
+    <section className="pt-10 pb-12 px-4 border-b border-slate-200/80 bg-surface">
       <div className="max-w-4xl mx-auto text-center">
         {/* Subtle Pill */}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-6">
@@ -49,7 +49,7 @@ export default function HeroSection({ onSearch, isSearching }) {
 
         {/* Search Bar */}
         <form onSubmit={handleSubmit} className="max-w-xl mx-auto mb-6">
-          <div className="bg-slate-50 rounded-xl p-1.5 flex items-center gap-2 border border-slate-300 shadow-sm focus-within:bg-white focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+          <div className="bg-slate-50 rounded-xl p-1.5 flex items-center gap-2 border border-slate-300 shadow-sm focus-within:bg-surface focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
             <div className="pl-3 text-slate-400">
               <Search className="w-5 h-5 text-slate-400" />
             </div>
@@ -63,7 +63,7 @@ export default function HeroSection({ onSearch, isSearching }) {
             <button
               type="submit"
               disabled={isSearching || !searchQuery.trim()}
-              className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer whitespace-nowrap active:scale-95"
+              className="px-5 py-2.5 rounded-lg bg-brand hover:bg-brand-hover text-white font-medium text-xs sm:text-sm shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer whitespace-nowrap active:scale-95"
             >
               {isSearching ? (
                 <>
@@ -90,7 +90,7 @@ export default function HeroSection({ onSearch, isSearching }) {
               <button
                 key={dis.key}
                 onClick={() => handleChipClick(dis.label)}
-                className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 hover:border-indigo-300 transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-surface hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 hover:border-indigo-300 transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
                 <span>{dis.icon}</span>
                 <span>{dis.label}</span>

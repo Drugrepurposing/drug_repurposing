@@ -1,5 +1,144 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   DARK MODE VARIANT (Tailwind CSS v4)
+
+   Tailwind v4 removed the `darkMode: 'class'` option from the JS config — the
+   variant is declared here in CSS instead. This registers `dark:` so it applies
+   when an ancestor carries the `.dark` class, and otherwise follows the
+   operating system preference unless the user has explicitly chosen light.
+   ============================================================================ */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not(.light *)) {
+      @slot;
+    }
+  }
+}
+
+/* ============================================================================
+   SEMANTIC TOKENS
+
+   These sit alongside Tailwind's palette and generate real utilities
+   (`bg-surface`, `bg-brand`, `text-ink-soft`, ...). They exist because a few
+   colours must NOT flip between themes:
+
+   - `surface`      the card background. Kept separate from `white` so that
+                    `text-white` on a coloured button stays white.
+   - `brand` / `ok` solid button fills. These keep their saturation in both
+                    themes so white button text stays readable.
+   - `ink`          permanently dark surfaces: modal scrims, the chatbot
+                    header, the WebGL molecular viewer panel.
+   ============================================================================ */
+@theme {
+  --color-surface: #ffffff;
+
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
+
+  --color-ok: #059669;
+  --color-ok-hover: #047857;
+
+  --color-ink: #0f172a;
+  --color-ink-2: #1e293b;
+  --color-ink-soft: #cbd5e1;
+}
+
+/* ============================================================================
+   DARK THEME
+
+   Every Tailwind colour utility compiles to a CSS variable reference — for
+   example `.bg-slate-50 { background-color: var(--color-slate-50) }`. So
+   redefining those variables on <html> re-themes the entire application
+   without changing a single component class.
+
+   These rules are deliberately unlayered so they win over Tailwind's own
+   `@theme` defaults regardless of layer order.
+
+   Neutrals are remapped by ROLE rather than simply inverted:
+     50-200   surfaces and borders (dark)
+     300      dim borders and inactive icons
+     400-500  muted and secondary text
+     600-900  body text through to headings (light)
+   ============================================================================ */
+html.dark {
+  color-scheme: dark;
+
+  /* Card surface — one step lighter than the page background */
+  --color-surface: #171f2b;
+
+  /* Neutrals */
+  --color-slate-50: #0e141d;
+  --color-slate-100: #1a2130;
+  --color-slate-200: #2b3547;
+  --color-slate-300: #3d4859;
+  --color-slate-400: #7b8798;
+  --color-slate-500: #9aa5b6;
+  --color-slate-600: #b6c0cf;
+  --color-slate-700: #ccd5e0;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+
+  /* Indigo — tints darken, text shades lighten */
+  --color-indigo-50: #1b1f42;
+  --color-indigo-100: #232a55;
+  --color-indigo-200: #343d75;
+  --color-indigo-300: #7f8ae0;
+  --color-indigo-600: #a5b4fc;
+  --color-indigo-700: #b3bcfd;
+  --color-indigo-800: #c7cdfe;
+  --color-indigo-900: #e0e4ff;
+
+  /* Emerald */
+  --color-emerald-50: #0f2b21;
+  --color-emerald-100: #143728;
+  --color-emerald-200: #1e5340;
+  --color-emerald-600: #4ade9f;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+
+  /* Amber */
+  --color-amber-50: #2a2011;
+  --color-amber-100: #3a2c14;
+  --color-amber-200: #5c451c;
+  --color-amber-300: #7a5c25;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-amber-900: #fef3c7;
+
+  /* Rose */
+  --color-rose-50: #2b1416;
+  --color-rose-100: #3b1a1d;
+  --color-rose-200: #5f2429;
+  --color-rose-300: #7d2f36;
+  --color-rose-600: #fb7185;
+  --color-rose-800: #fda4af;
+  --color-rose-900: #fecdd3;
+
+  /* Blue */
+  --color-blue-50: #10203a;
+  --color-blue-100: #16294a;
+  --color-blue-200: #1e3a6b;
+  --color-blue-700: #93c5fd;
+  --color-blue-800: #bfdbfe;
+
+  /* Purple */
+  --color-purple-100: #2a1b40;
+  --color-purple-200: #3b2560;
+  --color-purple-700: #d8b4fe;
+  --color-purple-800: #e9d5ff;
+
+  /* Sky */
+  --color-sky-50: #0d2231;
+  --color-sky-200: #1c4a63;
+  --color-sky-600: #7dd3fc;
+  --color-sky-800: #bae6fd;
+}
+
 @layer base {
   :root {
     --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -9,8 +148,8 @@
 
   body {
     font-family: var(--font-body);
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
@@ -23,16 +162,26 @@
 
 /* Minimalist Clean Panel Card */
 .clean-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-slate-200);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-  transition: all 0.2s ease-in-out;
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out,
+              box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
 .clean-card-hover:hover {
-  border-color: #cbd5e1;
+  border-color: var(--color-slate-300);
   box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
+}
+
+/* Shadows need more weight on a dark ground to read at all */
+html.dark .clean-card {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+html.dark .clean-card-hover:hover {
+  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55);
 }
 
 /* Custom Minimalist Scrollbar */
@@ -42,14 +191,26 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--color-slate-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--color-slate-300);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--color-slate-400);
+}
+
+/* Respect the operating system's reduced-motion setting */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

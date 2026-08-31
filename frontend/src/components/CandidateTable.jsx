@@ -39,7 +39,7 @@ export default function CandidateTable({
 
         <button
           onClick={() => onExportPDF(diseaseInfo?.name, diseaseInfo?.category, candidates)}
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+          className="px-4 py-2.5 rounded-xl bg-ok hover:bg-ok-hover text-white font-semibold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
         >
           <Download className="w-4 h-4" />
           <span>Download PDF Report</span>
@@ -47,7 +47,7 @@ export default function CandidateTable({
       </div>
 
       {/* Main Table */}
-      <div className="clean-card rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-white">
+      <div className="clean-card rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 text-slate-500 font-mono text-[11px] uppercase tracking-wider border-b border-slate-200">
