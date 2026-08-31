@@ -2,6 +2,8 @@
 FastAPI Server Entry Point for Autonomous Drug Repurposing Discovery Pipeline.
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import router as api_router
@@ -12,10 +14,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for localhost frontend development
+# Allowed frontend origins.
+# Locally nothing is set, so this stays "*" and behaves as before.
+# In production set ALLOWED_ORIGINS to the Vercel URL, e.g.
+#   ALLOWED_ORIGINS=https://drug-repurposing.vercel.app
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

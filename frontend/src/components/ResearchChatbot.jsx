@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Send, Bot, ChevronDown } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 
 export default function ResearchChatbot({ activeCandidate, activeDisease }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -23,7 +23,7 @@ export default function ResearchChatbot({ activeCandidate, activeDisease }) {
     setLoading(true);
 
     try {
-      const res = await axios.post('http://localhost:8000/api/chat', {
+      const res = await api.post('/api/chat', {
         query: userMsg,
         context_drug_name: activeCandidate?.name,
         context_disease_name: activeDisease?.name

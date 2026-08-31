@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Award, BookOpen } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 
 export default function TeamSection() {
   const [metrics, setMetrics] = useState(null);
 
   useEffect(() => {
-    axios.get('http://localhost:8000/api/metrics')
+    api.get('/api/metrics')
       .then(res => setMetrics(res.data))
       .catch(err => console.error("Metrics error:", err));
   }, []);

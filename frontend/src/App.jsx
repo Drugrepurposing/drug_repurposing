@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from './api';
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
 import HowItWorks from './components/HowItWorks';
@@ -31,7 +31,7 @@ export default function App() {
     setPipelineResult(null);
 
     try {
-      const res = await axios.post('http://localhost:8000/api/search', {
+      const res = await api.post('/api/search', {
         disease_query: diseaseQuery
       });
 
@@ -55,7 +55,7 @@ export default function App() {
 
   const handleExportPDF = async (diseaseName, diseaseCategory, candidates) => {
     try {
-      const response = await axios.post('http://localhost:8000/api/export-pdf', {
+      const response = await api.post('/api/export-pdf', {
         disease_name: diseaseName,
         disease_category: diseaseCategory,
         candidates: candidates
@@ -77,7 +77,7 @@ export default function App() {
 
   const handleFeedback = async (drugId, rating) => {
     try {
-      await axios.post('http://localhost:8000/api/feedback', {
+      await api.post('/api/feedback', {
         drug_id: drugId,
         rating: rating
       });

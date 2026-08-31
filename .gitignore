@@ -34,3 +34,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Secrets & local environment files
+.env
+.env.*
+!.env.example

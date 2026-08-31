@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRightLeft } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 
 export default function DrugCompareModal({ candidate1, allCandidates, onClose }) {
   const [candidate2, setCandidate2] = useState(() => {
@@ -11,7 +11,7 @@ export default function DrugCompareModal({ candidate1, allCandidates, onClose })
 
   useEffect(() => {
     if (candidate1 && candidate2) {
-      axios.post('http://localhost:8000/api/compare', {
+      api.post('/api/compare', {
         drug_id_1: candidate1.id,
         drug_id_2: candidate2.id
       })

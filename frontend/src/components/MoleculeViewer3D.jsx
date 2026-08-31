@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Box, Layers } from 'lucide-react';
-import axios from 'axios';
+import api from '../api';
 
 export default function MoleculeViewer3D({ candidate, onClose }) {
   const containerRef = useRef(null);
@@ -12,7 +12,7 @@ export default function MoleculeViewer3D({ candidate, onClose }) {
     if (!candidate) return;
 
     let isMounted = true;
-    axios.get(`http://localhost:8000/api/drugs/${candidate.id}/pdb`)
+    api.get(`/api/drugs/${candidate.id}/pdb`)
       .then(res => {
         if (isMounted) {
           setPdbContent(res.data);
