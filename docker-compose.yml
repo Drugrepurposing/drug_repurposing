@@ -1,0 +1,31 @@
+# Local PostgreSQL for development, so the team can work on the database
+# features without needing Neon credentials or an internet connection.
+#
+#   docker compose up -d
+#   cd backend && export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/drugrepurposing
+#   alembic upgrade head
+#
+# Port 5433 is used rather than the default 5432 so this never clashes with a
+# PostgreSQL already installed on your machine.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: drug-repurposing-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: drugrepurposing
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d drugrepurposing"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

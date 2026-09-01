@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -9,6 +11,8 @@ from app.data.one_lakh_drug_bank import ONE_LAKH_DRUG_BANK
 from app.core.agents import MultiAgentOrchestrator
 from app.core.pdf_generator import ReportGenerator
 from app.core.live_api import LiveBiomedicalAPI
+from app.db import repository
+from app.db.session import check_connection, is_database_enabled
 
 router = APIRouter()
 orchestrator = MultiAgentOrchestrator()
@@ -52,6 +56,8 @@ class PDFExportRequest(BaseModel):
 class FeedbackRequest(BaseModel):
     drug_id: str
     rating: str  # 'up' or 'down'
+    drug_name: Optional[str] = None
+    disease_name: Optional[str] = None
 
 class CompareRequest(BaseModel):
     drug_id_1: str
@@ -65,11 +71,21 @@ class ChatRequest(BaseModel):
 
 @router.get("/health")
 def health_check():
+    """
+    Reports what is actually true rather than a fixed string. The database
+    section runs SELECT 1 and times it, so an unreachable database shows up
+    here instead of only surfacing when a user tries to log in.
+    """
+    database = check_connection()
+    healthy = (not database["configured"]) or database["reachable"]
+
     return {
-        "status": "online",
+        "status": "online" if healthy else "degraded",
         "pipeline_version": "1.0.0",
         "engine": "Autonomous GNN + Docking + Multi-Agent Pipeline",
-        "institution": "GRIET Hyderabad"
+        "institution": "GRIET Hyderabad",
+        "database": database,
+        "persistence": "enabled" if is_database_enabled() else "disabled",
     }
 
 @router.get("/diseases")
@@ -87,14 +103,27 @@ def get_metrics():
 def run_search_pipeline(req: SearchRequest):
     if not req.disease_query or not req.disease_query.strip():
         raise HTTPException(status_code=400, detail="Disease query cannot be empty")
-    
+
+    started = time.perf_counter()
     result = orchestrator.run_pipeline(req.disease_query)
-    
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+
     # Cache candidate objects for 3D WebGL lookup
     if result.get("valid") != False and "candidates" in result:
         for cand in result["candidates"]:
             ACTIVE_SEARCH_RESULTS_CACHE[cand["id"]] = cand
-            
+
+    # Record the run. Anonymous for now; once authentication lands this call
+    # gains the user id. Never allowed to fail the request.
+    disease = result.get("disease") or {}
+    repository.record_search(
+        disease_query=req.disease_query.strip(),
+        disease_name=disease.get("name"),
+        disease_category=disease.get("category"),
+        result_count=len(result.get("candidates") or []),
+        duration_ms=duration_ms,
+    )
+
     return result
 
 @router.get("/drugs/{drug_id}")
@@ -148,9 +177,30 @@ def export_pdf_report(req: PDFExportRequest):
 
 @router.post("/feedback")
 def submit_expert_feedback(req: FeedbackRequest):
+    """
+    Stores the expert thumbs up/down. Until this change the endpoint returned
+    success and discarded the data, which made the "active learning loop"
+    described in the README untrue.
+    """
+    if req.rating not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
+
+    stored = repository.record_feedback(
+        drug_id=req.drug_id,
+        rating=req.rating,
+        drug_name=req.drug_name,
+        disease_name=req.disease_name,
+    )
+
     return {
         "status": "success",
-        "message": f"Feedback '{req.rating}' logged for candidate {req.drug_id}."
+        "stored": stored,
+        "message": (
+            f"Feedback '{req.rating}' recorded for candidate {req.drug_id}."
+            if stored
+            else f"Feedback '{req.rating}' received for {req.drug_id} "
+                 "(not persisted: no database configured)."
+        ),
     }
 
 @router.post("/compare")
