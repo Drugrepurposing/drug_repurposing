@@ -91,6 +91,82 @@ npm run dev
 
 ---
 
+## Database
+
+PostgreSQL, accessed with SQLAlchemy 2.0 and versioned with Alembic.
+
+### The application runs with or without it
+
+If `DATABASE_URL` is not set the API starts anyway and persistence becomes a
+no-op: search, docking, the 3D viewer, the chatbot and the PDF export all work
+exactly as before. Only accounts and history are unavailable. This is
+deliberate — nobody on the team is blocked waiting for credentials, local
+development works offline, and a database outage degrades the deployed site
+instead of breaking it. `GET /api/health` reports which mode you are in.
+
+### Schema
+
+| Table | Purpose |
+|---|---|
+| `users` | Accounts. Passwords stored as bcrypt hashes, never plaintext. |
+| `search_history` | Every pipeline run, with the resolved disease, result count and measured duration. |
+| `feedback` | Expert thumbs up/down. Previously `/api/feedback` returned success and discarded the data. |
+
+Design decisions worth noting:
+
+- Foreign keys use `ON DELETE CASCADE`, so removing a user removes their data
+  rather than leaving orphaned rows.
+- `user_id` is nullable throughout. Anonymous visitors can search and vote;
+  their rows simply have no owner. Gating the core feature behind a login
+  would make the product worse and the demo harder.
+- A composite index on `(user_id, created_at DESC)` matches exactly what the
+  history query filters and sorts by. An index that does not serve a real
+  query is decoration.
+- `UNIQUE (user_id, drug_id)` gives one vote per drug per signed-in user.
+  Changing your mind updates the row instead of adding a second one.
+
+### Local development
+
+Start a PostgreSQL container and apply the migrations:
+
+```bash
+docker compose up -d
+
+cd backend
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/drugrepurposing
+alembic upgrade head
+```
+
+Port 5433 is used so this never clashes with a PostgreSQL already installed on
+your machine. On Windows PowerShell, use
+`$env:DATABASE_URL="postgresql://postgres:postgres@localhost:5433/drugrepurposing"`.
+
+### Production
+
+Set `DATABASE_URL` in the Render dashboard to the Neon **pooled** connection
+string — the one with `-pooler` in the hostname. Pooling matters because the
+service can restart or run more than one instance, and each would otherwise
+open its own connections and exhaust the limit.
+
+The credential lives only in Render's environment settings. It is never
+committed, and `.gitignore` covers `.env` files so it cannot be added by
+accident.
+
+### Migrations
+
+Never create tables by hand. Every schema change is a versioned file committed
+to the repository:
+
+```bash
+alembic revision --autogenerate -m "describe the change"
+alembic upgrade head      # apply
+alembic downgrade -1      # roll back one
+```
+
+This means the schema matches the code at every commit, teammates get your
+changes with one command, and changes can be reversed.
+
+
 ## Background Media
 
 The application renders a full-screen photographic (or video) backdrop behind
