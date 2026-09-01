@@ -266,6 +266,54 @@ html.dark .clean-card-hover:hover {
   pointer-events: none;
 }
 
+/* ----------------------------------------------------------------------------
+   PHOTOGRAPHIC / VIDEO BACKDROP
+
+   --backdrop-veil is how much of the page background is laid over the media.
+   It is the single dial for the trade-off between seeing the picture and being
+   able to read the text. Light mode needs more of it, because dark imagery
+   under light-mode text has nowhere near enough contrast otherwise.
+   ---------------------------------------------------------------------------- */
+:root { --backdrop-veil: 84%; }
+html.dark { --backdrop-veil: 74%; }
+
+.media-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Oversized on purpose: parallax must never drag an edge into view. */
+.media-backdrop__parallax {
+  position: absolute;
+  inset: -8% 0;
+  height: 116%;
+  will-change: transform;
+}
+
+.media-backdrop__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.media-backdrop__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      140% 100% at 50% 0%,
+      transparent 0%,
+      color-mix(in srgb, var(--color-slate-50) 55%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--color-slate-50) var(--backdrop-veil), transparent);
+}
+
 .app-shell {
   position: relative;
   z-index: 1;
