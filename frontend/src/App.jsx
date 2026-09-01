@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import api from './api';
+import AmbientBackdrop from './components/AmbientBackdrop.jsx';
+import ScrollReveal from './components/ScrollReveal.jsx';
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
 import HowItWorks from './components/HowItWorks';
@@ -87,7 +89,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
+    <>
+    <AmbientBackdrop />
+    <div className="app-shell min-h-screen text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
       {/* Top Navbar */}
       <Navbar 
         activeTab={activeTab} 
@@ -159,12 +163,16 @@ export default function App() {
             )}
 
             {/* How It Works Section */}
-            <HowItWorks />
+            <ScrollReveal>
+              <HowItWorks />
+            </ScrollReveal>
           </>
         )}
 
         {activeTab === 'about' && (
-          <TeamSection />
+          <ScrollReveal>
+            <TeamSection />
+          </ScrollReveal>
         )}
       </main>
 
@@ -199,7 +207,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="py-6 border-t border-slate-200 bg-surface text-slate-500 text-xs text-center">
+      <footer className="surface-veil py-6 border-t border-slate-200 text-slate-500 text-xs text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <p className="font-semibold text-slate-800">Autonomous Drug Repurposing Discovery Pipeline</p>
@@ -217,5 +225,6 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </>
   );
 }
