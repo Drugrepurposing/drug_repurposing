@@ -29,27 +29,27 @@ export default function HeroSection({ onSearch, isSearching }) {
   };
 
   return (
-    <section className="pt-10 pb-12 px-4 border-b border-slate-200/80 bg-surface">
+    <section className="surface-veil pt-14 pb-12 px-4 border-b border-slate-200/80">
       <div className="max-w-4xl mx-auto text-center">
         {/* Subtle Pill */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-6">
+        <div className="hero-sub inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-7">
           <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           <span>AI-Driven Closed-Loop Biological Discovery Pipeline</span>
         </div>
 
         {/* Main Title */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 mb-4 leading-tight">
+        <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl font-medium text-slate-900 mb-5 leading-[1.08]">
           Autonomous Drug Repurposing <br className="hidden sm:block" />
-          <span className="text-indigo-600">Discovery & Biological Validation</span>
+          <span className="hero-line-2 italic font-normal text-indigo-600">Discovery &amp; Biological Validation</span>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
+        <p className="hero-sub text-slate-600 text-sm sm:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
           Systematically integrates multi-omics gene expression signatures, heterogeneous graph networks, SMILES chemical structures, and PubMed literature with <span className="font-semibold text-slate-900">AutoDock Vina biophysical docking validation</span>.
         </p>
 
         {/* Search Bar */}
-        <form onSubmit={handleSubmit} className="max-w-xl mx-auto mb-6">
+        <form onSubmit={handleSubmit} className="hero-search max-w-xl mx-auto mb-6">
           <div className="bg-slate-50 rounded-xl p-1.5 flex items-center gap-2 border border-slate-300 shadow-sm focus-within:bg-surface focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
             <div className="pl-3 text-slate-400">
               <Search className="w-5 h-5 text-slate-400" />
