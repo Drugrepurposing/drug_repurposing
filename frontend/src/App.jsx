@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import api from './api';
-import AmbientBackdrop from './components/AmbientBackdrop.jsx';
+// Photographic / video background. To go back to the generated molecular
+// field instead, import AmbientBackdrop.jsx here and swap the tag below.
+import MediaBackdrop from './components/MediaBackdrop.jsx';
 import ScrollReveal from './components/ScrollReveal.jsx';
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
@@ -90,7 +92,7 @@ export default function App() {
 
   return (
     <>
-    <AmbientBackdrop />
+    <MediaBackdrop />
     <div className="app-shell min-h-screen text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
       {/* Top Navbar */}
       <Navbar 

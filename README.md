@@ -91,5 +91,68 @@ npm run dev
 
 ---
 
+## Background Media
+
+The application renders a full-screen photographic (or video) backdrop behind
+every page, with a readability scrim over it.
+
+### Replacing the image
+
+Drop your own file at `frontend/public/backdrop.jpg`. That is the whole change
+— no code edit needed. The one shipped with the repository is a generated
+placeholder (a defocused microscopy field); replace it with a real photograph.
+
+**Free, commercially usable sources** (no attribution required):
+
+- [Pexels](https://www.pexels.com) — photos and video
+- [Pixabay](https://pixabay.com) — photos and video
+- [Unsplash](https://unsplash.com) — photos
+- [Coverr](https://coverr.co) and [Mixkit](https://mixkit.co) — video loops
+  intended for website backgrounds
+
+Useful search terms: *laboratory*, *microscope*, *pipette*, *petri dish*,
+*medical research*, *dna helix*, *scientist lab coat*.
+
+**Target: under 400 KB, 1920x1080.** A full-resolution download is often 5 MB
+and will make the site feel slow on the free hosting tier. Compress it at
+[squoosh.app](https://squoosh.app) — WebP at quality 75 is usually
+indistinguishable and a fraction of the size.
+
+### Using a video instead
+
+1. Put the file at `frontend/public/backdrop.mp4`
+2. Set `VITE_BACKDROP_VIDEO=/backdrop.mp4` in `frontend/.env.local`, and in the
+   Vercel environment variables for the deployed site
+
+Keep it short, silent and small — a 10-15 second loop, 1280x720, under 5 MB:
+
+```bash
+ffmpeg -i input.mp4 -t 12 -an -vf "scale=1280:-2" -c:v libx264 \
+  -crf 30 -preset slow -movflags +faststart public/backdrop.mp4
+```
+
+`-an` strips the audio track (a background video must never have sound),
+and `-movflags +faststart` lets it begin playing before the whole file has
+downloaded.
+
+The still image is used as the video's poster frame, so it is worth keeping
+both even when the video is enabled.
+
+### Tuning readability
+
+`--backdrop-veil` in `frontend/src/index.css` controls how much of the page
+background is laid over the media — the single trade-off between seeing the
+picture and being able to read the text. Light mode needs more of it than dark
+mode. Raise it if your image is busy or high-contrast; lower it to let more
+through.
+
+### Switching back to the generated molecular field
+
+`frontend/src/components/AmbientBackdrop.jsx` draws an animated 3D field of
+molecular nodes instead, with no image asset at all. To use it, import it in
+`frontend/src/App.jsx` in place of `MediaBackdrop` and swap the tag.
+
+---
+
 ## License & Citation
 Developed for academic major project submission at GRIET Hyderabad.
