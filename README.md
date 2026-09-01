@@ -162,7 +162,7 @@ Developed for academic major project submission at GRIET Hyderabad.
 ## Live Deployment
 
 - **Frontend:** https://drug-repurposing-three.vercel.app (Vercel)
-- **Backend API:** to be added (Render)
+- **Backend API:** https://drug-repurposing-api-zthi.onrender.com (Render)
 - **Database:** Neon Serverless Postgres, Singapore region
 
 Deployments are automatic: any push to the `develop` branch rebuilds and
