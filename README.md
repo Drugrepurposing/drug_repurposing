@@ -156,3 +156,16 @@ molecular nodes instead, with no image asset at all. To use it, import it in
 
 ## License & Citation
 Developed for academic major project submission at GRIET Hyderabad.
+
+---
+
+## Live Deployment
+
+- **Frontend:** https://drug-repurposing-three.vercel.app (Vercel)
+- **Backend API:** to be added (Render)
+- **Database:** Neon Serverless Postgres, Singapore region
+
+Deployments are automatic: any push to the `develop` branch rebuilds and
+redeploys the frontend on Vercel.
+
+
