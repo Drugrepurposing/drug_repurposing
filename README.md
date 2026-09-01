@@ -88,6 +88,75 @@ npm run dev
 - `POST /api/chat` — Research Q&A chatbot response.
 - `POST /api/export-pdf` — Generates and downloads PDF research report.
 - `POST /api/feedback` — Submits user feedback for active learning loop.
+- `POST /api/auth/register` — Creates an account and returns an access token.
+- `POST /api/auth/login` — Exchanges email and password for an access token.
+- `GET /api/auth/me` — Returns the account the bearer token belongs to.
+
+---
+
+## Authentication
+
+Email and password accounts, using bcrypt for password storage and stateless
+JWTs for sessions.
+
+### Signing in is optional, by design
+
+The discovery pipeline works for anonymous visitors. Signing in adds
+attribution and history on top; it does not unlock the core feature. Two
+dependencies express this:
+
+- `get_current_user` — 401 without a valid token. Used by endpoints that make
+  no sense without an account.
+- `get_optional_user` — resolves a token if one is present and returns `None`
+  otherwise. Used by `/api/search` and `/api/feedback`, so an examiner can type
+  a disease and see results immediately.
+
+### How passwords are stored
+
+Never in readable form. Each password is hashed with **bcrypt**, a deliberately
+slow algorithm with a per-user random salt embedded in the output, so two
+identical passwords produce different hashes and a stolen database cannot be
+attacked with a precomputed rainbow table.
+
+Passwords are SHA-256 pre-hashed before bcrypt sees them. bcrypt reads only the
+first 72 bytes of its input; feeding it a fixed-length digest means a long
+passphrase is honoured in full rather than silently truncated.
+
+### How sessions work
+
+`POST /api/auth/login` returns an HS256 JWT containing the user id and an
+expiry. The frontend stores it and sends it as `Authorization: Bearer <token>`
+on every request. Verification is a signature check, with no database lookup
+for the token itself — which matters on a free-tier database.
+
+Signing out discards the token client-side; there is no server call, because a
+stateless token has no server-side record to delete. The trade-off is that a
+token stays valid until it expires, which is why the lifetime is bounded.
+
+### Security decisions worth defending
+
+| Decision | Reason |
+| --- | --- |
+| Same error for unknown email and wrong password | Otherwise anyone can enumerate which addresses have accounts |
+| A hash is computed even when the email is unknown | Equalises response time, so timing does not leak the same information |
+| Duplicate email caught by the database constraint, not a prior `SELECT` | A check-then-insert loses the race between two simultaneous signups |
+| Email lowercased on write, with a unique index | `Alice@x.com` and `alice@x.com` cannot both register |
+| Minimum length only, no complexity rules | Follows NIST SP 800-63B; forced symbols produce `Password1!`, which is weaker than a long ordinary phrase |
+| Token validated against the server on page load | A stored token is not evidence the account still exists |
+
+### Environment variables
+
+| Variable | Where | Notes |
+| --- | --- | --- |
+| `JWT_SECRET` | Render → Environment → **Secret** | The signing key. Anyone holding it can forge a token for any user. If unset, a random key is generated at startup and every restart signs everyone out — acceptable locally, not in production. |
+| `JWT_EXPIRE_MINUTES` | optional | Session lifetime. Defaults to 7 days. |
+| `LOG_LEVEL` | optional | Defaults to `INFO`. |
+
+Generate a secret with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
 ---
 

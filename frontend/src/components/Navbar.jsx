@@ -1,8 +1,15 @@
 import React from 'react';
 import { Dna, Activity, Info, Search, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../context/theme-context.js';
+import UserMenu from './UserMenu.jsx';
 
-export default function Navbar({ activeTab, setActiveTab, onNewSearchClick, isPipelineRunning }) {
+export default function Navbar({
+  activeTab,
+  setActiveTab,
+  onNewSearchClick,
+  onSignInClick,
+  isPipelineRunning,
+}) {
   const { resolvedTheme, toggleTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
 
@@ -79,6 +86,8 @@ export default function Navbar({ activeTab, setActiveTab, onNewSearchClick, isPi
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
+
+          <UserMenu onSignInClick={onSignInClick} />
 
           <button
             onClick={onNewSearchClick}

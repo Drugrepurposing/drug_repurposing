@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
+
+class DatabaseUnavailable(RuntimeError):
+    """
+    Raised when an operation that genuinely requires a database is attempted
+    without one.
+
+    Search, docking and the PDF export degrade quietly - they lose their audit
+    trail but still work. Authentication cannot degrade: silently "succeeding"
+    at a login with nowhere to check the password would be far worse than a
+    clear error, so those calls raise this instead.
+    """
+
+
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 # Neon and most managed providers hand out a "postgres://" URL, which
@@ -78,6 +91,35 @@ def session_scope():
     except Exception:
         session.rollback()
         logger.exception("Database operation failed; continuing without persisting")
+    finally:
+        session.close()
+
+
+@contextmanager
+def strict_session():
+    """
+    Transactional session for operations whose failure the caller must know
+    about. Unlike `session_scope` it raises rather than swallowing:
+
+      - no database configured  -> DatabaseUnavailable
+      - constraint violation    -> sqlalchemy.exc.IntegrityError
+      - anything else           -> propagated unchanged
+
+    Authentication uses this. A duplicate email has to surface as "that address
+    is already registered", not vanish into a log line.
+    """
+    if SessionLocal is None:
+        raise DatabaseUnavailable(
+            "This feature needs a database. DATABASE_URL is not configured."
+        )
+
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 

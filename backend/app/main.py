@@ -2,11 +2,27 @@
 FastAPI Server Entry Point for Autonomous Drug Repurposing Discovery Pipeline.
 """
 
+import logging
 import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints import router as api_router
+
+# Configure logging BEFORE importing anything that logs while being imported.
+#
+# uvicorn only installs handlers on its own loggers, so warnings raised by the
+# application - "DATABASE_URL not set", "Database unreachable: ..." - were
+# emitted unformatted and were easy to miss entirely. Turning them into proper
+# lines with a timestamp and the module that raised them is the difference
+# between diagnosing a bad connection string in seconds and guessing at it.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s  %(levelname)-8s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+from app.api.auth import router as auth_router  # noqa: E402
+from app.api.endpoints import router as api_router  # noqa: E402
 
 app = FastAPI(
     title="Autonomous Drug Repurposing Discovery Pipeline API",
@@ -33,6 +49,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 @app.get("/")
 def root():

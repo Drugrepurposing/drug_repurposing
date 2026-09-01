@@ -1,10 +1,11 @@
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
+from app.api.deps import get_optional_user
 from app.data.dataset import DISEASES, CANDIDATE_DRUGS, MODEL_METRICS, METHOD_COMPARISON
 from app.data.large_drug_bank import LARGE_DRUG_BANK
 from app.data.one_lakh_drug_bank import ONE_LAKH_DRUG_BANK
@@ -100,7 +101,7 @@ def get_metrics():
     }
 
 @router.post("/search")
-def run_search_pipeline(req: SearchRequest):
+def run_search_pipeline(req: SearchRequest, user: Optional[dict] = Depends(get_optional_user)):
     if not req.disease_query or not req.disease_query.strip():
         raise HTTPException(status_code=400, detail="Disease query cannot be empty")
 
@@ -113,8 +114,8 @@ def run_search_pipeline(req: SearchRequest):
         for cand in result["candidates"]:
             ACTIVE_SEARCH_RESULTS_CACHE[cand["id"]] = cand
 
-    # Record the run. Anonymous for now; once authentication lands this call
-    # gains the user id. Never allowed to fail the request.
+    # Record the run, attributed to the signed-in user when there is one and
+    # anonymously otherwise. Never allowed to fail the request.
     disease = result.get("disease") or {}
     repository.record_search(
         disease_query=req.disease_query.strip(),
@@ -122,6 +123,7 @@ def run_search_pipeline(req: SearchRequest):
         disease_category=disease.get("category"),
         result_count=len(result.get("candidates") or []),
         duration_ms=duration_ms,
+        user_id=user["id"] if user else None,
     )
 
     return result
@@ -176,11 +178,17 @@ def export_pdf_report(req: PDFExportRequest):
         raise HTTPException(status_code=500, detail=f"PDF Generation failed: {str(e)}")
 
 @router.post("/feedback")
-def submit_expert_feedback(req: FeedbackRequest):
+def submit_expert_feedback(
+    req: FeedbackRequest,
+    user: Optional[dict] = Depends(get_optional_user),
+):
     """
     Stores the expert thumbs up/down. Until this change the endpoint returned
     success and discarded the data, which made the "active learning loop"
     described in the README untrue.
+
+    A signed-in reviewer changing their mind updates their existing vote; an
+    anonymous vote is simply added, since there is no identity to update.
     """
     if req.rating not in ("up", "down"):
         raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
@@ -190,6 +198,7 @@ def submit_expert_feedback(req: FeedbackRequest):
         rating=req.rating,
         drug_name=req.drug_name,
         disease_name=req.disease_name,
+        user_id=user["id"] if user else None,
     )
 
     return {

@@ -14,10 +14,12 @@ import ExplainabilityModal from './components/ExplainabilityModal';
 import DrugCompareModal from './components/DrugCompareModal';
 import ResearchChatbot from './components/ResearchChatbot';
 import TeamSection from './components/TeamSection';
+import AuthModal from './components/AuthModal.jsx';
 import { AlertCircle, Lightbulb } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [pipelineResult, setPipelineResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -102,6 +104,7 @@ export default function App() {
           setActiveTab('home');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        onSignInClick={() => setAuthModalOpen(true)}
         isPipelineRunning={isSearching}
       />
 
@@ -179,6 +182,8 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+
       {selected3DCandidate && (
         <MoleculeViewer3D 
           candidate={selected3DCandidate} 
