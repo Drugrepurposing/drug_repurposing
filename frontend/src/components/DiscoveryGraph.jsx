@@ -62,7 +62,7 @@ export default function DiscoveryGraph({ result, onSelectCandidate }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-      <div className="clean-card surface-veil rounded-2xl overflow-hidden">
+      <div data-tour="graph" className="clean-card surface-veil rounded-2xl overflow-hidden">
         <div className="px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="flex items-center gap-2 min-w-0">
             <Network className="w-3.5 h-3.5 text-brand shrink-0" />

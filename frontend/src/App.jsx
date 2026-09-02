@@ -19,6 +19,9 @@ import TeamSection from './components/TeamSection';
 import AuthModal from './components/AuthModal.jsx';
 import ResearchDashboard from './components/ResearchDashboard.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
+import GuidedTour from './components/GuidedTour.jsx';
+import TourPrompt from './components/TourPrompt.jsx';
+import { TOUR_STORAGE_KEY } from './lib/tourSteps.js';
 import ResultsSkeleton from './components/ResultsSkeleton.jsx';
 import LivePipelineFeed from './components/LivePipelineFeed.jsx';
 import PipelineSummary from './components/PipelineSummary.jsx';
@@ -51,6 +54,8 @@ export default function App() {
   const [selectedExplainCandidate, setSelectedExplainCandidate] = useState(null);
   const [selectedCompareCandidate, setSelectedCompareCandidate] = useState(null);
   const [compareSelection, setCompareSelection] = useState(null);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourPromptOpen, setTourPromptOpen] = useState(false);
 
   // Signing out while on "My Research" would otherwise leave the page showing a
   // tab that no longer exists in the navbar. Deriving the visible tab during
@@ -72,6 +77,41 @@ export default function App() {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  /**
+   * OFFER the tour once per browser - do not start it. An overlay that seizes
+   * the page on arrival, and starts a search of its own before the visitor has
+   * read anything, is an imposition; a small card in the corner is an
+   * invitation. Only shown where there is room to place a tour card beside
+   * what it points at, so on a narrow phone the header button is the way in.
+   *
+   * Storage can throw in a private window, so a failure to read it means no
+   * invitation rather than no application.
+   */
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TOUR_STORAGE_KEY)) return;
+      if (window.innerWidth < 768) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTourPromptOpen(true);
+    } catch { /* storage unavailable: skip the invitation, keep the app */ }
+  }, []);
+
+  /** Asked and answered, either way - the invitation does not come back. */
+  const settleTourPrompt = () => {
+    setTourPromptOpen(false);
+    try { window.localStorage.setItem(TOUR_STORAGE_KEY, '1'); } catch { /* not essential */ }
+  };
+
+  const startTour = () => {
+    settleTourPrompt();
+    setTourOpen(true);
+  };
+
+  const closeTour = () => {
+    setTourOpen(false);
+    try { window.localStorage.setItem(TOUR_STORAGE_KEY, '1'); } catch { /* not essential */ }
+  };
 
   const handleSearch = async (diseaseQuery) => {
     // Reached from the search box and from the "run again" button in the
@@ -204,6 +244,7 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onSignInClick={() => setAuthModalOpen(true)}
+        onStartTour={startTour}
         isPipelineRunning={isSearching}
       />
 
@@ -356,6 +397,19 @@ export default function App() {
           onClose={() => setSelectedCompareCandidate(null)}
         />
       )}
+
+      {tourPromptOpen && !tourOpen && (
+        <TourPrompt onStart={startTour} onDismiss={settleTourPrompt} />
+      )}
+
+      {/* Mounted only while it runs, so every replay starts at step one
+          without the component having to reset itself. */}
+      {tourOpen && <GuidedTour
+        open
+        onClose={closeTour}
+        onRunSearch={handleSearch}
+        hasResults={Boolean(pipelineResult)}
+      />}
 
       {/* Floating AI Chatbot */}
       <ResearchChatbot

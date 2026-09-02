@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dna, Activity, Info, LineChart, Search, Moon, Sun } from 'lucide-react';
+import { Dna, Activity, Info, LineChart, Search, Moon, Sun, Compass } from 'lucide-react';
 import { useTheme } from '../context/theme-context.js';
 import { useAuth } from '../context/auth-context.js';
 import UserMenu from './UserMenu.jsx';
@@ -9,6 +9,7 @@ export default function Navbar({
   setActiveTab,
   onNewSearchClick,
   onSignInClick,
+  onStartTour,
   isPipelineRunning,
 }) {
   const { resolvedTheme, toggleTheme } = useTheme();
@@ -97,6 +98,19 @@ export default function Navbar({
             <span className="hidden lg:inline">Project &amp; Team</span>
           </button>
 
+          {/* Replaying the tour has to be findable, or it only ever runs once
+              per browser and is invisible to anyone who dismissed it. */}
+          <button
+            onClick={onStartTour}
+            data-tour="tour-button"
+            title="Take the guided tour"
+            aria-label="Take the guided tour"
+            className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Compass className="w-4 h-4 text-slate-500 shrink-0" />
+            <span className="hidden lg:inline">Tour</span>
+          </button>
+
           <button
             onClick={toggleTheme}
             title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
@@ -107,7 +121,9 @@ export default function Navbar({
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          <UserMenu onSignInClick={onSignInClick} />
+          <span data-tour="account">
+            <UserMenu onSignInClick={onSignInClick} />
+          </span>
 
           <button
             onClick={onNewSearchClick}
