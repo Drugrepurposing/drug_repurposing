@@ -15,9 +15,12 @@ import DrugCompareModal from './components/DrugCompareModal';
 import ResearchChatbot from './components/ResearchChatbot';
 import TeamSection from './components/TeamSection';
 import AuthModal from './components/AuthModal.jsx';
+import ResearchDashboard from './components/ResearchDashboard.jsx';
+import { useAuth } from './context/auth-context.js';
 import { AlertCircle, Lightbulb } from 'lucide-react';
 
 export default function App() {
+  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -30,7 +33,16 @@ export default function App() {
   const [selectedExplainCandidate, setSelectedExplainCandidate] = useState(null);
   const [selectedCompareCandidate, setSelectedCompareCandidate] = useState(null);
 
+  // Signing out while on "My Research" would otherwise leave the page showing a
+  // tab that no longer exists in the navbar. Deriving the visible tab during
+  // render, rather than correcting it afterwards in an effect, means there is
+  // never a frame where the two disagree.
+  const visibleTab = activeTab === 'research' && !isAuthenticated ? 'home' : activeTab;
+
   const handleSearch = async (diseaseQuery) => {
+    // Reached from the search box and from the "run again" button in the
+    // research dashboard, so make sure the results are actually on screen.
+    setActiveTab('home');
     setIsSearching(true);
     setErrorMessage(null);
     setQuerySuggestions([]);
@@ -53,7 +65,13 @@ export default function App() {
       }
     } catch (err) {
       console.error("Search pipeline error:", err);
-      setErrorMessage("Failed to run discovery pipeline. Please ensure the backend server is running.");
+      // A cold start on the free tier is indistinguishable from a crash unless
+      // the message says so.
+      setErrorMessage(
+        err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT'
+          ? "The analysis server took too long to respond. It may be waking from sleep — please try again."
+          : "Failed to run discovery pipeline. Please ensure the backend server is running."
+      );
     } finally {
       setIsSearching(false);
     }
@@ -98,7 +116,7 @@ export default function App() {
     <div className="app-shell min-h-screen text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
       {/* Top Navbar */}
       <Navbar 
-        activeTab={activeTab} 
+        activeTab={visibleTab} 
         setActiveTab={setActiveTab} 
         onNewSearchClick={() => {
           setActiveTab('home');
@@ -110,7 +128,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {activeTab === 'home' && (
+        {visibleTab === 'home' && (
           <>
             {/* Hero Section */}
             <HeroSection onSearch={handleSearch} isSearching={isSearching} />
@@ -174,7 +192,11 @@ export default function App() {
           </>
         )}
 
-        {activeTab === 'about' && (
+        {visibleTab === 'research' && (
+          <ResearchDashboard onRerunSearch={handleSearch} />
+        )}
+
+        {visibleTab === 'about' && (
           <ScrollReveal>
             <TeamSection />
           </ScrollReveal>

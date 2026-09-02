@@ -1,6 +1,7 @@
 import React from 'react';
-import { Dna, Activity, Info, Search, Moon, Sun } from 'lucide-react';
+import { Dna, Activity, Info, LineChart, Search, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../context/theme-context.js';
+import { useAuth } from '../context/auth-context.js';
 import UserMenu from './UserMenu.jsx';
 
 export default function Navbar({
@@ -11,6 +12,7 @@ export default function Navbar({
   isPipelineRunning,
 }) {
   const { resolvedTheme, toggleTheme } = useTheme();
+  const { isAuthenticated } = useAuth();
   const isDark = resolvedTheme === 'dark';
 
   return (
@@ -62,6 +64,24 @@ export default function Navbar({
             <Activity className="w-4 h-4 text-slate-500 shrink-0" />
             <span className="hidden lg:inline">Pipeline Discovery</span>
           </button>
+
+          {/* Only shown when signed in — a "My Research" tab that greets an
+              anonymous visitor with a login prompt is a dead end. */}
+          {isAuthenticated && (
+            <button
+              onClick={() => setActiveTab('research')}
+              title="My Research"
+              aria-label="My Research"
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'research'
+                  ? 'bg-slate-100 text-slate-900 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <LineChart className="w-4 h-4 text-slate-500 shrink-0" />
+              <span className="hidden lg:inline">My Research</span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('about')}

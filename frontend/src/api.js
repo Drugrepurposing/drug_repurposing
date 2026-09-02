@@ -42,8 +42,24 @@ export function storeToken(token) {
   }
 }
 
+/**
+ * A request with no timeout hangs forever. That matters more than usual here:
+ * the backend runs on a free tier that sleeps when idle, and a serverless
+ * database that suspends its compute, so "slow" is a normal state rather than
+ * an exceptional one. Without a ceiling, a button can spin indefinitely with
+ * nothing to tell the user whether to wait or retry.
+ *
+ * 45 seconds is chosen to sit just above the worst legitimate case — a cold
+ * start on both tiers at once — so a real wait completes and a genuine failure
+ * still surfaces.
+ */
+export const REQUEST_TIMEOUT_MS = 45000;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: REQUEST_TIMEOUT_MS,
+  timeoutErrorMessage:
+    'The server took too long to respond. It may be waking from sleep — please try again.',
 });
 
 /**

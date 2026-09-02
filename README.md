@@ -91,6 +91,29 @@ npm run dev
 - `POST /api/auth/register` — Creates an account and returns an access token.
 - `POST /api/auth/login` — Exchanges email and password for an access token.
 - `GET /api/auth/me` — Returns the account the bearer token belongs to.
+- `GET /api/history` — A page of the caller's past pipeline runs.
+- `GET /api/history/stats` — Dashboard aggregates over that history.
+- `DELETE /api/history/{id}` — Removes one of the caller's entries.
+
+---
+
+## Configuration
+
+Copy `backend/.env.example` to `backend/.env` and fill it in once:
+
+```bash
+cd backend
+cp .env.example .env        # Copy-Item .env.example .env on PowerShell
+```
+
+The backend reads that file at startup, so every terminal you launch it from
+picks up the same settings. **A real environment variable always overrides the
+file**, which is what keeps deployment correct: Render sets `DATABASE_URL` and
+`JWT_SECRET` in the process environment and no `.env` file exists there, so the
+file can never shadow production.
+
+`.env` is covered by `.gitignore`; `.env.example` is committed as documentation
+of the keys, with no values.
 
 ---
 
@@ -221,6 +244,52 @@ The credential lives only in Render's environment settings. It is never
 committed, and `.gitignore` covers `.env` files so it cannot be added by
 accident.
 
+### Timeouts
+
+Every wait has a ceiling, because each one defaults to *forever* and a request
+that waits forever is indistinguishable from a crashed server:
+
+| Setting | Default | What it bounds |
+| --- | --- | --- |
+| `connect_timeout` | 10s | Opening a connection. psycopg2 has none by default, so a database that accepts the TCP connection but never completes the handshake hangs the request permanently. |
+| `statement_timeout` | 15s | A query that has started but will not finish. Applied per transaction with `SET LOCAL` — see below. |
+| `pool_timeout` | 15s | Waiting for a free connection. Without it, once every connection is held by a stalled query, every later request queues behind them and the whole API stops responding. |
+| TCP keepalives | 30s idle | Detecting a silently dropped link rather than waiting on it. |
+| axios `timeout` | 45s | The browser's wait, set above the worst legitimate cold start so a real wait completes and a real failure surfaces. |
+
+`/api/health` reports the reason when the database is unreachable, not just
+`reachable: false`. Any `user:password` pair is stripped from that text before
+it leaves the server — a useless error message is a problem, but the fix for it
+must not be a leaked credential.
+
+### Why the query timeout is not set at connection time
+
+The obvious way to set `statement_timeout` is a libpq connection option:
+`options=-c statement_timeout=15000`. Against a direct Postgres connection that
+works. Against the **pooled** endpoint it fails outright:
+
+```
+ERROR: unsupported startup parameter: options
+```
+
+A pooled connection string (the `-pooler` hostname) does not reach Postgres
+directly. It reaches **PgBouncer**, which multiplexes many client connections
+onto a small number of real database connections — which is what lets a free
+tier serve more than a handful of clients. The cost is that some Postgres
+features do not pass through it, and arbitrary server startup parameters are
+one of them.
+
+So the timeout is applied per transaction instead, with
+`SET LOCAL statement_timeout`. `SET LOCAL` is scoped to the current transaction
+and reset when it ends, which is precisely what makes it correct here: under
+transaction pooling the next transaction may land on a different backend
+connection, so a session-wide `SET` would either leak into unrelated work or be
+silently lost.
+
+Everything else in `connect_args` — `connect_timeout`, the TCP keepalives — is
+a *client-side* libpq setting handled locally and never sent to the server, so
+it passes through the pooler untouched.
+
 ### Migrations
 
 Never create tables by hand. Every schema change is a versioned file committed
@@ -235,6 +304,58 @@ alembic downgrade -1      # roll back one
 This means the schema matches the code at every commit, teammates get your
 changes with one command, and changes can be reversed.
 
+---
+
+## Search history & the research dashboard
+
+The **My Research** tab (visible once signed in) shows every pipeline run
+recorded against the account, plus aggregates over them.
+
+### The aggregates are computed in SQL, not in the browser
+
+Counting, grouping and taking a median are what a database is for. Fetching
+every row to loop over it in JavaScript would be slower and would get worse as
+the table grows. Four queries back the whole dashboard:
+
+| Query | Technique |
+| --- | --- |
+| Totals | `COUNT`, `COUNT(DISTINCT …)`, `SUM` in one pass |
+| Typical runtime | `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms)` |
+| Daily activity | `generate_series` `LEFT JOIN`ed to the table |
+| Most investigated | `GROUP BY … ORDER BY COUNT(*) DESC LIMIT 5` |
+
+Two of those are worth being able to explain:
+
+- **`generate_series` with a `LEFT JOIN`** produces one row per day whether or
+  not anything happened that day. Without it, days with no searches would simply
+  be absent from the result, and a chart drawn from those rows would silently
+  close the gaps — showing continuous activity that never happened.
+- **`PERCENTILE_CONT`, not `AVG`.** One run that happened while an external API
+  was timing out would drag a mean upwards and misrepresent typical
+  performance. A median ignores it.
+
+### Ownership is enforced in the WHERE clause
+
+`DELETE FROM search_history WHERE id = :id AND user_id = :user_id`. The user id
+comes from the verified token, never from a request parameter, and it is part of
+the query rather than a check performed after loading the row — so there is no
+window in which someone else's row is in hand. A miss returns 404 whether the
+entry does not exist or belongs to somebody else, so ids cannot be probed.
+
+### The chart palette was validated, not chosen by eye
+
+The dashboard charts are single-hue, because colour there encodes magnitude
+rather than identity. The instinctive alternative — green for supported votes,
+red for rejected — was measured and rejected: that pair separates by roughly
+ΔE 5 under deuteranopia against these surfaces, well under the threshold of 8 at
+which two colours can be reliably told apart. The supported/rejected split is
+drawn instead as one proportion meter with icons and written counts, so nothing
+depends on distinguishing two hues.
+
+Both steps (`#4f46e5` light, `#7079f5` dark) were checked against the actual
+card surfaces they render on for lightness band and 3:1 contrast.
+
+---
 
 ## Background Media
 

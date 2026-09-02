@@ -23,7 +23,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.api.deps import get_current_user
 from app.core.security import (
@@ -33,7 +33,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db import repository
-from app.db.session import DatabaseUnavailable
+from app.db.session import DatabaseUnavailable, describe_error
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,27 @@ ACCOUNTS_UNAVAILABLE = (
     "Accounts are unavailable because the server has no database configured. "
     "Search and analysis still work without signing in."
 )
+
+DATABASE_TIMEOUT = (
+    "The database did not respond in time. It may be waking from sleep — "
+    "please try again in a moment."
+)
+
+
+def _database_failure(exc: Exception, action: str) -> HTTPException:
+    """
+    Turn a database failure into a 503 that says something useful.
+
+    The full reason is logged server-side; the client is told the category
+    rather than the detail. A driver error can name the host and, in some
+    forms, the connection string, and none of that belongs in a response to
+    an unauthenticated caller.
+    """
+    logger.warning("%s failed - %s", action, describe_error(exc))
+    detail = DATABASE_TIMEOUT if isinstance(exc, OperationalError) else (
+        f"Could not {action.lower()}. Please try again."
+    )
+    return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
 
 class RegisterRequest(BaseModel):
@@ -101,12 +122,8 @@ def register(req: RegisterRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=ACCOUNTS_UNAVAILABLE,
         )
-    except Exception:
-        logger.exception("Registration failed")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not create the account. Please try again.",
-        )
+    except Exception as exc:
+        raise _database_failure(exc, "Create the account")
 
     return _token_response(user)
 
@@ -121,12 +138,8 @@ def login(req: LoginRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=ACCOUNTS_UNAVAILABLE,
         )
-    except Exception:
-        logger.exception("Login lookup failed")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach the account database. Please try again.",
-        )
+    except Exception as exc:
+        raise _database_failure(exc, "Sign in")
 
     invalid = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

@@ -35,7 +35,14 @@ from typing import Optional
 import bcrypt
 import jwt
 
+from app.core.env import load_env_file
+
 logger = logging.getLogger(__name__)
+
+# This module is imported before app.db.session, and it reads JWT_SECRET at
+# import time, so it has to load the .env file itself. The call is idempotent -
+# whichever module gets there first does the work.
+load_env_file()
 
 ALGORITHM = "HS256"
 

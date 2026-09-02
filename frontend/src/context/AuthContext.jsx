@@ -26,6 +26,10 @@ function extractErrorMessage(error, fallback) {
   if (Array.isArray(detail) && detail.length > 0) {
     return detail[0]?.msg || fallback;
   }
+  // A cold start on the free tier looks exactly like a hang, so name it.
+  if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {
+    return 'The server took too long to respond. It may be waking from sleep — please try again.';
+  }
   if (error?.code === 'ERR_NETWORK') {
     return 'Could not reach the server. Check that the backend is running.';
   }

@@ -9,7 +9,7 @@ instead of scattering `if is_database_enabled()` through the API layer.
 import logging
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, text
 
 from app.db.models import Feedback, SearchHistory, User
 from app.db.session import session_scope, strict_session
@@ -144,26 +144,170 @@ def record_feedback(
         return True
 
 
-def list_search_history(user_id: int, limit: int = 50) -> List[dict]:
-    """A user's past searches, newest first. Served by the composite index."""
-    with session_scope() as session:
-        if session is None:
-            return []
+def list_search_history(user_id: int, limit: int = 20, offset: int = 0) -> dict:
+    """
+    A page of a user's past searches, newest first.
+
+    The ORDER BY and WHERE here are exactly what the composite index
+    ix_search_history_user_created was built for: (user_id, created_at DESC).
+    Postgres can walk that index in order and stop after `limit` rows instead
+    of sorting the whole table.
+
+    Returns the total alongside the page so the interface can say "showing 20
+    of 137" rather than only knowing whether another page exists.
+    """
+    with strict_session() as session:
+        total = session.scalar(
+            select(func.count())
+            .select_from(SearchHistory)
+            .where(SearchHistory.user_id == user_id)
+        ) or 0
+
         rows = session.scalars(
             select(SearchHistory)
             .where(SearchHistory.user_id == user_id)
-            .order_by(SearchHistory.created_at.desc())
+            .order_by(SearchHistory.created_at.desc(), SearchHistory.id.desc())
             .limit(limit)
+            .offset(offset)
         ).all()
-        return [
-            {
-                "id": row.id,
-                "disease_query": row.disease_query,
-                "disease_name": row.disease_name,
-                "disease_category": row.disease_category,
-                "result_count": row.result_count,
-                "duration_ms": row.duration_ms,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            }
-            for row in rows
+
+        return {
+            "total": total,
+            "items": [
+                {
+                    "id": row.id,
+                    "disease_query": row.disease_query,
+                    "disease_name": row.disease_name,
+                    "disease_category": row.disease_category,
+                    "result_count": row.result_count,
+                    "duration_ms": row.duration_ms,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ],
+        }
+
+
+def delete_search_entry(user_id: int, entry_id: int) -> bool:
+    """
+    Remove one history entry.
+
+    The user_id is part of the WHERE clause, not checked separately afterwards.
+    That is the difference between a filter and an authorisation check: there is
+    no window in which the row is loaded and could be returned or deleted before
+    ownership is confirmed, and no way to delete someone else's row by guessing
+    its id. Returns False when nothing matched, which the endpoint turns into a
+    404 - deliberately the same response for "does not exist" and "not yours",
+    so ids cannot be probed.
+    """
+    with strict_session() as session:
+        result = session.execute(
+            delete(SearchHistory).where(
+                SearchHistory.id == entry_id,
+                SearchHistory.user_id == user_id,
+            )
+        )
+        return result.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Dashboard aggregates
+#
+# Written as SQL rather than assembled in Python on purpose. Counting,
+# grouping and taking a median are what a database is for; pulling every row
+# across the network to loop over it in the application would be slower and
+# would get worse as the table grows.
+# ---------------------------------------------------------------------------
+
+_ACTIVITY_SQL = text("""
+    SELECT day::date AS day, COUNT(s.id) AS runs
+    FROM generate_series(
+        CURRENT_DATE - MAKE_INTERVAL(days => :days - 1),
+        CURRENT_DATE,
+        INTERVAL '1 day'
+    ) AS day
+    LEFT JOIN search_history s
+        ON s.user_id = :user_id
+       AND s.created_at >= day
+       AND s.created_at <  day + INTERVAL '1 day'
+    GROUP BY day
+    ORDER BY day
+""")
+
+_TOP_DISEASES_SQL = text("""
+    SELECT disease_name, COUNT(*) AS runs
+    FROM search_history
+    WHERE user_id = :user_id AND disease_name IS NOT NULL
+    GROUP BY disease_name
+    ORDER BY runs DESC, disease_name ASC
+    LIMIT :limit
+""")
+
+_TOTALS_SQL = text("""
+    SELECT
+        COUNT(*)                                                    AS total_runs,
+        COUNT(DISTINCT disease_name)                                AS distinct_diseases,
+        COALESCE(SUM(result_count), 0)                              AS total_candidates,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms)    AS median_ms
+    FROM search_history
+    WHERE user_id = :user_id
+""")
+
+_FEEDBACK_SQL = text("""
+    SELECT rating, COUNT(*) AS votes
+    FROM feedback
+    WHERE user_id = :user_id
+    GROUP BY rating
+""")
+
+
+def history_stats(user_id: int, days: int = 14) -> dict:
+    """
+    Everything the research dashboard needs, in four queries.
+
+    Two details worth knowing:
+
+    - The activity series is built from generate_series LEFT JOINed to the
+      table, so days with no searches come back as zero instead of being
+      missing. A chart drawn from rows that simply are not there silently
+      closes the gaps and misrepresents the data.
+    - The median uses PERCENTILE_CONT rather than AVG. One search that ran
+      while an external API was timing out would drag a mean upwards and
+      misrepresent typical performance; a median ignores it.
+    """
+    with strict_session() as session:
+        totals = session.execute(_TOTALS_SQL, {"user_id": user_id}).mappings().one()
+
+        activity = [
+            {"day": row["day"].isoformat(), "runs": int(row["runs"])}
+            for row in session.execute(
+                _ACTIVITY_SQL, {"user_id": user_id, "days": days}
+            ).mappings()
         ]
+
+        top_diseases = [
+            {"disease_name": row["disease_name"], "runs": int(row["runs"])}
+            for row in session.execute(
+                _TOP_DISEASES_SQL, {"user_id": user_id, "limit": 5}
+            ).mappings()
+        ]
+
+        votes = {
+            row["rating"]: int(row["votes"])
+            for row in session.execute(_FEEDBACK_SQL, {"user_id": user_id}).mappings()
+        }
+
+        median_ms = totals["median_ms"]
+
+        return {
+            "total_runs": int(totals["total_runs"] or 0),
+            "distinct_diseases": int(totals["distinct_diseases"] or 0),
+            "total_candidates": int(totals["total_candidates"] or 0),
+            "median_ms": round(float(median_ms), 1) if median_ms is not None else None,
+            "activity": activity,
+            "top_diseases": top_diseases,
+            "feedback": {
+                "supported": votes.get("up", 0),
+                "rejected": votes.get("down", 0),
+            },
+        }

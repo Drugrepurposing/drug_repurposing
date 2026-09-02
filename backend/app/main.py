@@ -23,6 +23,7 @@ logging.basicConfig(
 
 from app.api.auth import router as auth_router  # noqa: E402
 from app.api.endpoints import router as api_router  # noqa: E402
+from app.api.history import router as history_router  # noqa: E402
 
 app = FastAPI(
     title="Autonomous Drug Repurposing Discovery Pipeline API",
@@ -34,11 +35,24 @@ app = FastAPI(
 # Locally nothing is set, so this stays "*" and behaves as before.
 # In production set ALLOWED_ORIGINS to the Vercel URL, e.g.
 #   ALLOWED_ORIGINS=https://drug-repurposing.vercel.app
+#
+# The `or "*"` is load-bearing, not belt-and-braces. os.getenv returns the
+# default only when the key is ABSENT; a key present but empty returns "",
+# which parsed to an empty list and produced a CORS policy that allowed no
+# origins at all - the frontend blocked from its own backend, reported in the
+# browser as an unexplained network error. An empty setting means "not
+# configured", so it falls back here as well as in the .env loader.
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    for origin in (os.getenv("ALLOWED_ORIGINS", "").strip() or "*").split(",")
     if origin.strip()
 ]
+
+logger = logging.getLogger(__name__)
+logger.info(
+    "CORS allowing %s",
+    "all origins" if ALLOWED_ORIGINS == ["*"] else ", ".join(ALLOWED_ORIGINS),
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +64,7 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(history_router, prefix="/api")
 
 @app.get("/")
 def root():
