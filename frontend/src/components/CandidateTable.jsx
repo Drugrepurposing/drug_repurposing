@@ -177,7 +177,7 @@ export default function CandidateTable({
       </div>
 
       {/* Main Table */}
-      <div className="clean-card rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-surface">
+      <div data-tour="table" className="clean-card rounded-2xl overflow-hidden shadow-xs border border-slate-200 bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 text-slate-500 font-mono text-[11px] uppercase tracking-wider border-b border-slate-200">
@@ -206,7 +206,10 @@ export default function CandidateTable({
                   {/* Compare selection. A real checkbox, so it is reachable by
                       keyboard, announced as checked, and togglable with space
                       without any handler of ours. */}
-                  <td className="py-3.5 pl-4 pr-1">
+                  <td
+                    className="py-3.5 pl-4 pr-1"
+                    {...(rowIndex === 0 ? { 'data-tour': 'compare' } : {})}
+                  >
                     <input
                       type="checkbox"
                       checked={slots.includes(cand.id)}

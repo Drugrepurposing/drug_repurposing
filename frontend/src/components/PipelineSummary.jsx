@@ -75,7 +75,7 @@ export default function PipelineSummary({ stages, totalMs }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-      <div className="clean-card surface-veil rounded-xl overflow-hidden">
+      <div data-tour="summary" className="clean-card surface-veil rounded-xl overflow-hidden">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}

@@ -120,7 +120,7 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
         </p>
 
         {/* Search Bar */}
-        <form onSubmit={handleSubmit} className="hero-search max-w-xl mx-auto mb-6 relative" ref={searchWrapRef}>
+        <form onSubmit={handleSubmit} data-tour="search" className="hero-search max-w-xl mx-auto mb-6 relative" ref={searchWrapRef}>
           <div className="bg-slate-50 rounded-xl p-1.5 flex items-center gap-2 border border-slate-300 shadow-sm focus-within:bg-surface focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
             <div className="pl-3 text-slate-400">
               <Search className="w-5 h-5 text-slate-400" />
@@ -143,6 +143,7 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
             <button
               type="button"
               onClick={onOpenPalette}
+              data-tour="palette"
               title="Open command palette"
               aria-label="Open command palette"
               className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-300 bg-surface text-[10px] font-mono text-slate-500 hover:text-slate-800 hover:border-slate-400 transition-colors cursor-pointer shrink-0"
