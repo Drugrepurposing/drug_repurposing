@@ -415,6 +415,7 @@ export default function App() {
       <ResearchChatbot
         activeCandidate={pipelineResult?.candidates?.[0]}
         activeDisease={pipelineResult?.disease}
+        candidates={pipelineResult?.candidates}
       />
 
       {/* Footer */}
