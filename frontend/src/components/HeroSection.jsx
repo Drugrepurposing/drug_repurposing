@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, Sparkles, ArrowRight, Network, Clock, Command } from 'lucide-react';
 import MolecularScene3D from './MolecularScene3D.jsx';
-import MolecularAmbience from './MolecularAmbience.jsx';
 import api from '../api.js';
 import { useAuth } from '../context/auth-context.js';
 
@@ -78,13 +77,12 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
     (item) => !searchQuery.trim() || item.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
 
+  // No veil on this section. The hero is where the background is meant to be
+  // seen, and laying a translucent panel across the full width flattens it to
+  // near-white. Panels further down keep their veil, because they carry data
+  // that has to be read.
   return (
-    <section className="surface-veil relative overflow-hidden pt-14 pb-12 px-4 border-b border-slate-200/80">
-      {/* Drifting rings, backbones and helices behind the hero. Decorative and
-          pointer-transparent, so it never intercepts a click meant for the
-          search box sitting on top of it. */}
-      <MolecularAmbience />
-
+    <section className="relative overflow-hidden pt-14 pb-12 px-4 border-b border-slate-200/60">
       <div className="relative z-10 max-w-4xl mx-auto text-center">
         {/* Subtle Pill */}
         <div className="hero-sub inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-7">
@@ -183,7 +181,7 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
 
         {/* Preset Chips */}
         <div className="mb-8">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+          <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-2.5">
             Or select a target indication:
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">

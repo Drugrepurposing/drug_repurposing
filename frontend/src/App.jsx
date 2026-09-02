@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from './api';
-// Photographic / video background. To go back to the generated molecular
-// field instead, import AmbientBackdrop.jsx here and swap the tag below.
-import MediaBackdrop from './components/MediaBackdrop.jsx';
+// The animated background for the whole window. Two alternatives are kept in
+// the tree and can be swapped in here: MediaBackdrop.jsx (a photograph or
+// looping video) and AmbientBackdrop.jsx (a scroll-driven molecular field).
+import AuroraBackdrop from './components/AuroraBackdrop.jsx';
 import ScrollReveal from './components/ScrollReveal.jsx';
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
@@ -190,7 +191,7 @@ export default function App() {
 
   return (
     <>
-    <MediaBackdrop />
+    <AuroraBackdrop />
     <div className="app-shell min-h-screen text-slate-900 flex flex-col font-sans antialiased selection:bg-brand selection:text-white">
       {/* Top Navbar */}
       <Navbar 
@@ -352,7 +353,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="surface-veil py-6 border-t border-slate-200 text-slate-500 text-xs text-center">
+      <footer className="surface-veil-soft py-6 border-t border-slate-200/70 text-slate-500 text-xs text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <p className="font-semibold text-slate-800">Autonomous Drug Repurposing Discovery Pipeline</p>

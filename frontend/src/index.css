@@ -345,17 +345,87 @@ html.dark { --backdrop-veil: 74%; }
     color-mix(in srgb, var(--color-slate-50) var(--backdrop-veil), transparent);
 }
 
+/* ----------------------------------------------------------------------------
+   AURORA BACKDROP
+
+   The page's background, painted by AuroraBackdrop.jsx. Only the wash and the
+   readability scrim live here; the aurora itself is one canvas.
+
+   It used to be five CSS elements with filter: blur(90px), which measured at 6
+   frames per second against a 59fps ceiling - very large blurred layers are
+   re-rasterised and re-composited on every frame that anything else on the
+   page moves. Removing the filter recovered 48fps, and moving the whole
+   backdrop into one small offscreen buffer, upscaled in a single draw, put it
+   back at the ceiling. The blur is now free, because a stretched small image
+   IS a blur.
+   ---------------------------------------------------------------------------- */
+:root {
+  --aurora-wash: linear-gradient(170deg, #eaf6ff 0%, #f2f9ff 38%, #f8fafc 100%);
+  /* Light text sits on light colour, so a little of the page ground is laid
+     back over the aurora. Without it the pale headline weight loses contrast
+     wherever a curtain passes underneath. */
+  --aurora-veil: 6%;
+}
+
+html.dark {
+  --aurora-wash: linear-gradient(170deg, #0a1220 0%, #0b1526 42%, #090e18 100%);
+  --aurora-veil: 10%;
+}
+
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--aurora-wash);
+}
+
+.aurora__net {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Reading comes first. This lays a measured amount of the page ground back
+   over the aurora - heavier towards the bottom, where the content is densest
+   and the colour has done its work. */
+.aurora__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 85% at 50% 0%,
+      transparent 0%,
+      color-mix(in srgb, var(--color-slate-50) 22%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--color-slate-50) var(--aurora-veil), transparent);
+}
+
 .app-shell {
   position: relative;
   z-index: 1;
 }
 
 /* Translucent surfaces, so the moving field reads through the page rather
-   than being boxed into one panel. */
+   than being boxed into one panel. Used on panels that carry data: the veil is
+   heavy enough that small type and thin borders stay crisp over anything
+   moving underneath. */
 .surface-veil {
   background-color: color-mix(in srgb, var(--color-surface) 76%, transparent);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
+}
+
+/* The lighter version, for full-width bands rather than panels. A section the
+   width of the window at the panel veil reads as a white stripe cutting the
+   background in half; at this weight the colour carries through the seam while
+   the text on top still has more contrast than it needs. */
+.surface-veil-soft {
+  background-color: color-mix(in srgb, var(--color-surface) 40%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ============================================================================
