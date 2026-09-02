@@ -91,6 +91,7 @@ npm run dev
 - `POST /api/auth/register` — Creates an account and returns an access token.
 - `POST /api/auth/login` — Exchanges email and password for an access token.
 - `GET /api/auth/me` — Returns the account the bearer token belongs to.
+- `GET /api/drugs/{id}/similar` — Nearest compounds by vector similarity.
 - `GET /api/history` — A page of the caller's past pipeline runs.
 - `GET /api/history/stats` — Dashboard aggregates over that history.
 - `DELETE /api/history/{id}` — Removes one of the caller's entries.
@@ -244,6 +245,38 @@ The credential lives only in Render's environment settings. It is never
 committed, and `.gitignore` covers `.env` files so it cannot be added by
 accident.
 
+### Live biomedical lookups
+
+The pipeline enriches each search from Europe PMC while the user waits. Those
+calls are the least reliable part of the system — a free public API that can be
+slow, rate-limited or down, on a network that may filter it.
+
+Three properties keep that from becoming the user's problem:
+
+- **A hard wall-clock budget per call.** A socket timeout is not enough: DNS
+  resolution happens before the socket exists, so a stalled resolver blocks far
+  longer than the timeout passed to `urlopen`. Each lookup runs on a daemon
+  thread and is abandoned if it overruns, whatever it is stuck on. An
+  overrunning thread finishes into the cache eventually; the request that was
+  waiting has already moved on.
+- **The two enrichment lookups run concurrently**, under one shared deadline,
+  so the pipeline waits for the slower rather than the sum.
+- **`DISABLE_LIVE_APIS=1`** skips them entirely. Insurance for demonstrating on
+  a network that blocks outbound requests.
+
+Daemon threads specifically, not a `ThreadPoolExecutor`: the executor registers
+an atexit hook that *joins* its workers, so one request stuck in a hung socket
+would hold the whole process open and Ctrl+C would appear to do nothing.
+
+Measured with every external call hanging indefinitely: a search returns in
+**7.5 seconds** with results intact. With `DISABLE_LIVE_APIS=1`: **0.02
+seconds**. Before this, the same conditions hung past the browser's 45-second
+ceiling.
+
+Fallback values match the shape the real function returns, keys included — a
+bare `{}` would be correct as an "empty" value and would raise a `KeyError`
+downstream, a second bug appearing exactly when the network fails.
+
 ### Timeouts
 
 Every wait has a ceiling, because each one defaults to *forever* and a request
@@ -354,6 +387,81 @@ depends on distinguishing two hues.
 
 Both steps (`#4f46e5` light, `#7079f5` dark) were checked against the actual
 card surfaces they render on for lightness band and 3:1 contrast.
+
+---
+
+## Vector similarity search
+
+`GET /api/drugs/{id}/similar` answers a question the rest of the pipeline
+cannot. The pipeline ranks drugs *against a disease*; this ranks drugs *against
+another drug*. Every compound is stored as a 128-dimensional vector in
+PostgreSQL and neighbours are found with an approximate-nearest-neighbour
+index.
+
+### What the embedding is — and is not
+
+It is a **deterministic feature embedding**: target gene, enriched pathways,
+indication area, SMILES substructure n-grams, and the multi-omics and docking
+descriptors already present in the compound library, combined into one
+normalised vector.
+
+**It is not the output of a trained graph neural network,** and the code does
+not claim otherwise. That distinction is worth stating rather than blurring,
+because what this actually demonstrates is the **retrieval layer** a learned
+model plugs into. The table, the index, the distance metric and the query are
+identical whether vectors come from curated features or a trained encoder —
+only `build_drug_embedding` changes, and `model_version` records which produced
+the stored rows.
+
+### Does it work?
+
+Measured over the library, the top-5 neighbours of a randomly chosen compound
+share its target gene **100%** of the time, against a **5.2%** random baseline.
+That is roughly a nineteen-fold lift, and it is the number to quote if asked
+whether the embedding means anything.
+
+### Implementation details worth defending
+
+| Decision | Reason |
+| --- | --- |
+| **blake2b**, not Python's `hash()` | `hash()` on strings is randomly salted per process, so vectors written by one run would not match the next and the stored index would silently become meaningless |
+| **Signed** hashing | Without random signs, two tokens colliding in a bucket always reinforce each other and collisions only ever inflate similarity; with signs they cancel on average, so the error is unbiased |
+| Each block **L2-normalised separately**, then weighted | Otherwise a block dominates purely for having more dimensions or a larger natural scale |
+| Numeric block **mean-centred** | Without it every vector points into the same positive orthant and cosine similarity compresses into a narrow band near 1, where differences stop being legible |
+| Query vector fetched, then passed as a **parameter** | Written as `ORDER BY embedding <=> (SELECT ...)` the planner can fall back to a sequential scan. Correct answers, no index — a mistake that stays invisible until the table is large |
+| `vector_cosine_ops` matching the `<=>` operator | An index built for a different metric is silently ignored by the planner |
+| **HNSW**, with IVFFlat fallback | HNSW needs pgvector ≥ 0.5.0; hardcoding it would break the migration on an older server for no benefit |
+
+The plan confirms the index is used rather than assumed:
+
+```
+Index Scan using ix_drug_embeddings_hnsw on drug_embeddings
+  Order By: (embedding <=> $1)
+  actual time=0.418..0.423 rows=5
+```
+
+### Seeding
+
+```bash
+cd backend
+python -m app.scripts.build_embeddings          # upsert every compound
+python -m app.scripts.build_embeddings --prune  # also drop older model versions
+```
+
+It reads `DATABASE_URL` exactly as the server does, so running it locally seeds
+the deployed database. That is deliberate: the free hosting tier has no way to
+run a one-off job, and this needs to run once per embedding-model change rather
+than on every deploy.
+
+### A note on the compound library
+
+The library mixes real approved drugs with generated analogues, and the
+generated entries carry target assignments that do not reflect real
+pharmacology. Similarity search reports faithfully what is in the data, so
+those entries appear in results — a neighbour labelled "shares target ACHE" is
+an accurate statement about the dataset, not a pharmacological claim. Replacing
+the library with licensed DrugBank data would change the inputs and none of the
+machinery above.
 
 ---
 
