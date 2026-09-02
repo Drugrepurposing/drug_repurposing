@@ -77,19 +77,41 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
     (item) => !searchQuery.trim() || item.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
 
+  // No veil on this section. The hero is where the background is meant to be
+  // seen, and laying a translucent panel across the full width flattens it to
+  // near-white. Panels further down keep their veil, because they carry data
+  // that has to be read.
   return (
-    <section className="surface-veil pt-14 pb-12 px-4 border-b border-slate-200/80">
-      <div className="max-w-4xl mx-auto text-center">
+    <section className="relative overflow-hidden pt-14 pb-12 px-4 border-b border-slate-200/60">
+      <div className="relative z-10 max-w-4xl mx-auto text-center">
         {/* Subtle Pill */}
         <div className="hero-sub inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-7">
           <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           <span>AI-Driven Closed-Loop Biological Discovery Pipeline</span>
         </div>
 
-        {/* Main Title */}
+        {/* Main Title.
+
+            The second line used to read "Discovery & Biological Validation",
+            which restated the first: repurposing IS discovery, so the largest
+            type on the page was spending its weight saying the same thing
+            twice. It now names the two halves of the pipeline instead - the
+            evidence that ranks a candidate, and the structure that confirms
+            it - which is both more specific and shorter.
+
+            Line one is unchanged on purpose: it is the project's name, and it
+            is what anyone arriving here is looking for. The full official
+            title still appears in the navbar, the pill above, and the footer. */}
         <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl font-medium text-slate-900 mb-5 leading-[1.08]">
-          Autonomous Drug Repurposing <br className="hidden sm:block" />
-          <span className="hero-line-2 italic font-normal text-indigo-600">Discovery &amp; Biological Validation</span>
+          Autonomous Drug Repurposing
+          {/* A size step down, and its own block. At the same size as line one
+              this phrase wrapped onto three lines and left "pose" stranded by
+              itself, which is worse than the redundancy it replaced. Smaller
+              also states the relationship correctly: line one is the name,
+              this is the clause that qualifies it. */}
+          <span className="hero-line-2 block mt-2 text-2xl sm:text-3xl md:text-4xl italic font-normal text-indigo-600">
+            Ranked by evidence, confirmed by structure
+          </span>
         </h1>
 
         {/* Subtitle */}
@@ -177,7 +199,7 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
 
         {/* Preset Chips */}
         <div className="mb-8">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+          <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-2.5">
             Or select a target indication:
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">

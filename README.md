@@ -82,6 +82,7 @@ npm run dev
 - `GET /api/diseases` — List available benchmark diseases and target gene mappings.
 - `GET /api/metrics` — Model performance metrics table (Table I from paper).
 - `POST /api/search` — Runs full multi-agent pipeline for a disease query.
+- `POST /api/search/stream` — The same pipeline, streamed stage by stage (SSE).
 - `GET /api/drugs/{id}` — Fetch detailed metadata for a candidate drug.
 - `GET /api/drugs/{id}/pdb` — Returns PDB 3D structure for WebGL rendering.
 - `POST /api/compare` — Compares two candidate drugs side-by-side.
@@ -462,6 +463,78 @@ those entries appear in results — a neighbour labelled "shares target ACHE" is
 an accurate statement about the dataset, not a pharmacological claim. Replacing
 the library with licensed DrugBank data would change the inputs and none of the
 machinery above.
+
+---
+
+## Live pipeline streaming
+
+`POST /api/search/stream` runs the same pipeline and reports each stage **while
+it happens**, so the seconds a search takes become visible work rather than a
+blank wait.
+
+The events are real. They fire at actual stage boundaries inside
+`run_pipeline`, and `elapsed_ms` is measured rather than assumed — when the
+literature lookup takes four seconds because Europe PMC is struggling, the
+interface says four seconds. A progress animation on a fixed timer would look
+similar and mean nothing.
+
+### How it is wired
+
+The pipeline is synchronous, so it runs on a worker thread and pushes events
+onto a queue that the response generator drains. Yielding from inside the
+pipeline instead would mean rewriting it as a generator and coupling its
+structure to the transport; a `progress` callback keeps the two independent,
+and passing `None` — which is what `POST /api/search` does — leaves the
+original behaviour untouched.
+
+### Two details that only matter once deployed
+
+- **A keep-alive comment frame every second.** Proxies commonly buffer or drop
+  a response that produces nothing for a while, which would make streaming work
+  perfectly on a laptop and silently fail in production.
+- **`X-Accel-Buffering: no`**, asking nginx-style proxies not to buffer at all.
+
+### Why the reveal is paced
+
+The pipeline is fast — often under 400ms on a warm cache — so five stages would
+flash past in a third of a second and show the reader nothing. Events that have
+already arrived are therefore *rendered* about 320ms apart, putting a search at
+roughly two seconds of legible progress.
+
+The pipeline itself is not slowed, and every duration displayed is the server's
+own measurement. Pacing only ever adds time when the server is faster than the
+eye: a stage that genuinely takes two seconds arrives after the queue has
+drained and appears immediately.
+
+The two alternatives were both worse. Sleeping in the backend would make the API
+dishonestly slow for every caller, not just the browser. Animating on a fixed
+timer with no real events would show the same three seconds whatever actually
+happened — the exact thing this feature exists to avoid.
+
+Because the two numbers differ, the summary bar says **"server pipeline time"**
+rather than "completed in", and the expanded view states plainly that the feed
+paces its reveal. Two different numbers under the same label would read as a bug.
+
+### What survives the results
+
+The live feed is transient by nature, but its timings are the most interesting
+operational fact the application produces. A collapsed summary keeps them above
+the results — total server time, the slowest stage, and each stage's own cost
+(the gap between consecutive events, since each carries elapsed-since-start;
+presenting the cumulative figures as per-stage timings would overstate every
+stage after the first).
+
+### The fallback is the point
+
+The client falls back to `POST /api/search` if streaming is unsupported, blocked,
+or produces no first event within twelve seconds. The worst outcome is the
+behaviour that existed before. A feature that can break the core flow when the
+network misbehaves is not worth having.
+
+`EventSource` — the obvious API for server-sent events — is not used, because it
+only issues GET requests and cannot carry an `Authorization` header. Without
+that header a signed-in user's search would be recorded as anonymous and never
+appear in their history, so the body stream is read from `fetch` instead.
 
 ---
 
