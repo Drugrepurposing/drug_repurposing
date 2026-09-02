@@ -1,8 +1,11 @@
+import json
 import logging
+import queue
+import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
@@ -104,6 +107,119 @@ def get_metrics():
         "method_comparison": METHOD_COMPARISON
     }
 
+def _finalise_search(result: Dict[str, Any], disease_query: str,
+                     duration_ms: float, user: Optional[dict]) -> None:
+    """
+    Side effects shared by the streaming and non-streaming search endpoints:
+    cache the candidates for later 3D lookups, and record the run.
+
+    Factored out rather than duplicated so the two endpoints cannot drift -
+    a streaming search that quietly failed to appear in history would be a
+    confusing bug to track down.
+    """
+    if result.get("valid") is not False and "candidates" in result:
+        for candidate in result["candidates"]:
+            ACTIVE_SEARCH_RESULTS_CACHE[candidate["id"]] = candidate
+
+    disease = result.get("disease") or {}
+    repository.record_search(
+        disease_query=disease_query.strip(),
+        disease_name=disease.get("name"),
+        disease_category=disease.get("category"),
+        result_count=len(result.get("candidates") or []),
+        duration_ms=duration_ms,
+        user_id=user["id"] if user else None,
+    )
+
+
+@router.post("/search/stream")
+def run_search_pipeline_streaming(
+    req: SearchRequest,
+    user: Optional[dict] = Depends(get_optional_user),
+):
+    """
+    The same pipeline, reported stage by stage while it runs.
+
+    Why this exists: a search takes seconds, and returning everything at the
+    end leaves the user watching nothing. Streaming turns the wait into
+    visible work - and the events are real, fired at actual stage boundaries
+    with measured elapsed times, not a timed animation played over a request.
+
+    Shape: Server-Sent Events. The pipeline is synchronous, so it runs on a
+    worker thread and pushes events onto a queue that this generator drains.
+    Doing it the other way round - yielding from inside the pipeline - would
+    mean rewriting it as a generator and would couple its structure to the
+    transport.
+
+    Two details that matter in deployment rather than on a laptop:
+
+    - A comment frame is emitted every second while the pipeline is busy.
+      Proxies commonly buffer or drop a response that produces nothing for a
+      while, which would make streaming appear to work locally and silently
+      fail in production.
+    - X-Accel-Buffering: no asks nginx-style proxies not to buffer at all.
+
+    The client falls back to POST /api/search if any of this misbehaves, so
+    streaming is an enhancement rather than a dependency.
+    """
+    if not req.disease_query or not req.disease_query.strip():
+        raise HTTPException(status_code=400, detail="Disease query cannot be empty")
+
+    disease_query = req.disease_query.strip()
+
+    def event_stream():
+        events: "queue.Queue" = queue.Queue()
+        outcome: Dict[str, Any] = {}
+        started = time.perf_counter()
+
+        def worker():
+            try:
+                outcome["result"] = orchestrator.run_pipeline(disease_query, progress=events.put)
+            except Exception as exc:                      # pragma: no cover - defensive
+                logger.exception("Streaming pipeline failed")
+                outcome["error"] = str(exc)
+            finally:
+                events.put(None)
+
+        # Daemon, so a wedged pipeline can never hold the process open.
+        threading.Thread(target=worker, name="search-pipeline", daemon=True).start()
+
+        while True:
+            try:
+                event = events.get(timeout=1.0)
+            except queue.Empty:
+                yield ": keep-alive\n\n"
+                continue
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+
+        if "error" in outcome:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'The pipeline failed. Please try again.'})}\n\n"
+            return
+
+        result = outcome.get("result") or {}
+        try:
+            _finalise_search(result, disease_query, duration_ms, user)
+        except Exception:                                  # pragma: no cover
+            logger.exception("Could not record the streamed search")
+
+        result["duration_ms"] = duration_ms
+        yield f"data: {json.dumps({'type': 'result', 'result': result})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.post("/search")
 def run_search_pipeline(req: SearchRequest, user: Optional[dict] = Depends(get_optional_user)):
     if not req.disease_query or not req.disease_query.strip():
@@ -113,23 +229,7 @@ def run_search_pipeline(req: SearchRequest, user: Optional[dict] = Depends(get_o
     result = orchestrator.run_pipeline(req.disease_query)
     duration_ms = round((time.perf_counter() - started) * 1000, 2)
 
-    # Cache candidate objects for 3D WebGL lookup
-    if result.get("valid") != False and "candidates" in result:
-        for cand in result["candidates"]:
-            ACTIVE_SEARCH_RESULTS_CACHE[cand["id"]] = cand
-
-    # Record the run, attributed to the signed-in user when there is one and
-    # anonymously otherwise. Never allowed to fail the request.
-    disease = result.get("disease") or {}
-    repository.record_search(
-        disease_query=req.disease_query.strip(),
-        disease_name=disease.get("name"),
-        disease_category=disease.get("category"),
-        result_count=len(result.get("candidates") or []),
-        duration_ms=duration_ms,
-        user_id=user["id"] if user else None,
-    )
-
+    _finalise_search(result, req.disease_query, duration_ms, user)
     return result
 
 @router.get("/drugs/{drug_id}")

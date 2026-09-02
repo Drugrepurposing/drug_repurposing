@@ -35,12 +35,41 @@ class MultiAgentOrchestrator:
         self.ranker = RankingEngine()
         self.live_api = LiveBiomedicalAPI()
 
-    def run_pipeline(self, disease_query: str) -> dict:
+    def run_pipeline(self, disease_query: str, progress=None) -> dict:
         """
-        Executes Two-Stage Funnel Screening across 100,000+ (1 Lakh+) chemical compounds in <30ms.
+        Executes Two-Stage Funnel Screening across 100,000+ (1 Lakh+) chemical compounds.
+
+        `progress` is an optional callback invoked at each real stage boundary,
+        used by the streaming endpoint to report work as it happens rather than
+        only once everything is finished.
+
+        Two properties make these events honest rather than decorative:
+
+        - They fire at the actual boundaries in this function, so a stage is
+          reported complete only once its work has returned.
+        - `elapsed_ms` is measured, not assumed. If the literature enrichment
+          takes four seconds because an external API is struggling, the event
+          says four seconds.
+
+        Nothing else changes when `progress` is None, which is how the existing
+        non-streaming endpoint keeps working untouched.
         """
         start_time = time.time()
         query_clean = disease_query.strip().lower()
+
+        def emit(stage: str, label: str, detail: str = "", status: str = "running"):
+            if progress is None:
+                return
+            progress({
+                "type": "stage",
+                "stage": stage,
+                "label": label,
+                "detail": detail,
+                "status": status,
+                "elapsed_ms": round((time.time() - start_time) * 1000, 1),
+            })
+
+        emit("validate", "Validating indication", f"Resolving '{disease_query.strip()}'")
         
         # Validate if the query is a valid medical condition.
         # Wrapped in a wall-clock budget: this gates the whole request, so a
@@ -60,6 +89,7 @@ class MultiAgentOrchestrator:
         )
         if not is_valid_query:
             suggestions = self.live_api.get_fuzzy_suggestions(disease_query)
+            emit("validate", "Validating indication", "Unrecognised disease name", "failed")
             return {
                 "valid": False,
                 "error_message": f"Invalid or unrecognised disease name '{disease_query}'.",
@@ -67,6 +97,8 @@ class MultiAgentOrchestrator:
                 "pipeline_logs": [],
                 "candidates": []
             }
+
+        emit("validate", "Validating indication", "Recognised medical indication", "completed")
 
         matched_key = None
         for key, dis_info in DISEASES.items():
@@ -82,6 +114,9 @@ class MultiAgentOrchestrator:
         # Both are optional: if either overruns its budget the pipeline
         # continues with an empty result rather than failing the search, since
         # screening, ranking and docking do not depend on them.
+        emit("enrich", "Mining live literature",
+             "Querying Europe PMC for disease-gene evidence")
+
         # The fallback for the targets lookup mirrors the shape that function
         # returns on its own failure path, keys included. A bare {} would be
         # "correct" as an empty value and would crash the log line below on a
@@ -101,6 +136,14 @@ class MultiAgentOrchestrator:
         ])
         live_lit_data = {**offline_targets, **(live_lit_data or {})}
         lit_candidates = lit_candidates or []
+
+        emit("enrich", "Mining live literature",
+             f"{live_lit_data.get('hit_count', 0):,} publication records; "
+             f"{len(lit_candidates)} literature-derived candidates",
+             "completed")
+
+        emit("screen", "Screening compound matrix",
+             "Vectorised 128-D similarity across 100,000+ compounds")
 
         # Stage 1: Vectorized Matrix Screening across 100,000+ (1 Lakh+) Chemical Compounds in 24ms
         screened_100k_shortlist = ONE_LAKH_DRUG_BANK.screen_100k_compounds(disease_query, top_k=20)
@@ -122,6 +165,11 @@ class MultiAgentOrchestrator:
             for m in matched_pool:
                 m["origin"] = "gnn_discovery"
             candidate_pool = lit_candidates + matched_pool + screened_100k_shortlist[:5]
+
+        emit("screen", "Screening compound matrix",
+             f"{len(screened_100k_shortlist)} compounds passed the first funnel", "completed")
+        emit("score", "Scoring drug-target interactions",
+             f"GNN, LINCS reversal and docking over {len(candidate_pool)} candidates")
 
         pipeline_logs = []
         processed_candidates = []
@@ -158,12 +206,21 @@ class MultiAgentOrchestrator:
             
             processed_candidates.append(d_item)
 
+        emit("score", "Scoring drug-target interactions",
+             f"{len(processed_candidates)} candidates scored", "completed")
+        emit("rank", "Multi-objective Pareto ranking",
+             "Optimising therapeutic relevance against safety likelihood")
+
         # Sort all screened candidates by overall Pareto score
         processed_candidates.sort(key=lambda x: x["overall_score"], reverse=True)
         top_candidates = processed_candidates[:12]
 
         for rank_idx, cand in enumerate(top_candidates, 1):
             cand["rank"] = rank_idx
+
+        emit("rank", "Multi-objective Pareto ranking",
+             f"Top candidate: {top_candidates[0]['name']} "
+             f"(Delta G {top_candidates[0]['docking_delta_g']} kcal/mol)", "completed")
 
         # --- AGENT 2 & 3 EXECUTION ---
         pipeline_logs.append({

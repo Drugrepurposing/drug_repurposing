@@ -18,6 +18,10 @@ import AuthModal from './components/AuthModal.jsx';
 import ResearchDashboard from './components/ResearchDashboard.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
 import ResultsSkeleton from './components/ResultsSkeleton.jsx';
+import LivePipelineFeed from './components/LivePipelineFeed.jsx';
+import PipelineSummary from './components/PipelineSummary.jsx';
+import usePacedStages from './hooks/usePacedStages.js';
+import { runSearchStreaming } from './lib/streamSearch.js';
 import { useAuth } from './context/auth-context.js';
 import { useToast } from './context/toast-context.js';
 import { AlertCircle, Lightbulb } from 'lucide-react';
@@ -32,6 +36,12 @@ export default function App() {
   const [pipelineResult, setPipelineResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [querySuggestions, setQuerySuggestions] = useState([]);
+  // Streamed stage events, revealed at a readable cadence. The pipeline is not
+  // slowed - only the rendering of events that have already arrived, so a
+  // 350ms run does not flash five stages past unread. See usePacedStages.
+  const { stages: liveStages, draining, started: feedStarted, push: pushStage, reset: resetStages }
+    = usePacedStages();
+  const [pendingResult, setPendingResult] = useState(null);
 
   // Active Modals state
   const [selected3DCandidate, setSelected3DCandidate] = useState(null);
@@ -67,21 +77,24 @@ export default function App() {
     setErrorMessage(null);
     setQuerySuggestions([]);
     setPipelineResult(null);
+    setPendingResult(null);
+    resetStages();
 
     try {
-      const res = await api.post('/api/search', {
-        disease_query: diseaseQuery
-      });
+      const { result } = await runSearchStreaming(diseaseQuery, pushStage);
 
-      if (res.data.valid === false) {
-        setErrorMessage(res.data.error_message);
-        setQuerySuggestions(res.data.suggestions || []);
+      if (result.valid === false) {
+        // An unrecognised disease has nothing to animate towards, so it
+        // resolves straight away rather than waiting for the queue.
+        setErrorMessage(result.error_message);
+        setQuerySuggestions(result.suggestions || []);
         setPipelineResult(null);
+        setIsSearching(false);
       } else {
-        setPipelineResult(res.data);
-        setTimeout(() => {
-          document.getElementById('pipeline-results')?.scrollIntoView({ behavior: 'smooth' });
-        }, 300);
+        // Held rather than shown, so the results do not land on top of a feed
+        // that is still animating. The effect below publishes it, and clears
+        // the searching flag, once the queue has drained.
+        setPendingResult(result);
       }
     } catch (err) {
       console.error("Search pipeline error:", err);
@@ -92,10 +105,34 @@ export default function App() {
           ? "The analysis server took too long to respond. It may be waking from sleep — please try again."
           : "Failed to run discovery pipeline. Please ensure the backend server is running."
       );
-    } finally {
       setIsSearching(false);
     }
   };
+
+  // Bring the feed into view the moment it appears. Without this the pipeline
+  // reports itself below the fold: the user presses Enter, nothing visibly
+  // happens, and the whole point of streaming is lost to a scroll position.
+  useEffect(() => {
+    if (!feedStarted) return;
+    document.getElementById('live-pipeline')?.scrollIntoView({
+      behavior: 'smooth', block: 'center',
+    });
+  }, [feedStarted]);
+
+  // Publish the result once every streamed event has been shown. Without this
+  // the results would land mid-animation and the feed would vanish halfway
+  // through, which reads as a glitch rather than as a pipeline finishing.
+  useEffect(() => {
+    if (!pendingResult || draining) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPipelineResult(pendingResult);
+    setPendingResult(null);
+    setIsSearching(false);
+    const id = window.setTimeout(() => {
+      document.getElementById('pipeline-results')?.scrollIntoView({ behavior: 'smooth' });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [pendingResult, draining]);
 
   const handleExportPDF = async (diseaseName, diseaseCategory, candidates) => {
     try {
@@ -212,11 +249,24 @@ export default function App() {
             {/* While the pipeline runs, a shaped placeholder holds the page
                 height steady so results appear in place rather than shoving
                 the layout down as the user starts reading. */}
-            {isSearching && !pipelineResult && <ResultsSkeleton />}
+            {isSearching && !pipelineResult && (
+              // The live feed replaces the skeleton as soon as the first stage
+              // event lands. Until then there is nothing truthful to show, so
+              // the placeholder stands in - and it is also what a browser that
+              // fell back to the non-streaming endpoint keeps seeing.
+              feedStarted
+                ? <LivePipelineFeed stages={liveStages} />
+                : <ResultsSkeleton />
+            )}
 
             {/* Results Section */}
             {pipelineResult && (
               <div id="pipeline-results" className="pt-6">
+                <PipelineSummary
+                  stages={liveStages}
+                  totalMs={pipelineResult.duration_ms}
+                />
+
                 <AgentProgressFeed 
                   logs={pipelineResult.pipeline_logs} 
                   isRunning={isSearching} 
