@@ -90,10 +90,28 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
           <span>AI-Driven Closed-Loop Biological Discovery Pipeline</span>
         </div>
 
-        {/* Main Title */}
+        {/* Main Title.
+
+            The second line used to read "Discovery & Biological Validation",
+            which restated the first: repurposing IS discovery, so the largest
+            type on the page was spending its weight saying the same thing
+            twice. It now names the two halves of the pipeline instead - the
+            evidence that ranks a candidate, and the structure that confirms
+            it - which is both more specific and shorter.
+
+            Line one is unchanged on purpose: it is the project's name, and it
+            is what anyone arriving here is looking for. The full official
+            title still appears in the navbar, the pill above, and the footer. */}
         <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl font-medium text-slate-900 mb-5 leading-[1.08]">
-          Autonomous Drug Repurposing <br className="hidden sm:block" />
-          <span className="hero-line-2 italic font-normal text-indigo-600">Discovery &amp; Biological Validation</span>
+          Autonomous Drug Repurposing
+          {/* A size step down, and its own block. At the same size as line one
+              this phrase wrapped onto three lines and left "pose" stranded by
+              itself, which is worse than the redundancy it replaced. Smaller
+              also states the relationship correctly: line one is the name,
+              this is the clause that qualifies it. */}
+          <span className="hero-line-2 block mt-2 text-2xl sm:text-3xl md:text-4xl italic font-normal text-indigo-600">
+            Ranked by evidence, confirmed by structure
+          </span>
         </h1>
 
         {/* Subtitle */}
