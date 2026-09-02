@@ -16,6 +16,7 @@ from app.data.one_lakh_drug_bank import ONE_LAKH_DRUG_BANK
 from app.core.agents import MultiAgentOrchestrator
 from app.core.pdf_generator import ReportGenerator
 from app.core.live_api import LiveBiomedicalAPI
+from app.core import assistant
 from app.db import repository
 from app.db.session import check_connection, is_database_enabled
 
@@ -70,10 +71,21 @@ class CompareRequest(BaseModel):
     drug_id_1: str
     drug_id_2: str
 
+class ChatTurn(BaseModel):
+    sender: str
+    text: str
+
+
 class ChatRequest(BaseModel):
     query: str
     context_drug_name: Optional[str] = None
     context_disease_name: Optional[str] = None
+    # The conversation so far, so follow-ups like "and its safety?" resolve.
+    history: List[ChatTurn] = []
+    # The candidates currently on screen. Sent by the client rather than read
+    # from the server cache so the assistant answers about the search the user
+    # is actually looking at, including after a browser refresh.
+    candidates: List[Dict[str, Any]] = []
 
 
 @router.get("/health")
@@ -85,6 +97,10 @@ def health_check():
     """
     database = check_connection()
     healthy = (not database["configured"]) or database["reachable"]
+    # Whether the assistant will use the model or its fallback, reported
+    # without spending a request to find out - so a key missing from the
+    # hosting environment shows up before a demo rather than during one.
+    assistant_status = assistant.status()
 
     return {
         "status": "online" if healthy else "degraded",
@@ -94,6 +110,7 @@ def health_check():
         "database": database,
         "persistence": "enabled" if is_database_enabled() else "disabled",
         "vector_search": repository.embeddings_ready(),
+        "assistant": assistant_status,
     }
 
 @router.get("/diseases")
@@ -386,57 +403,36 @@ def compare_candidate_drugs(req: CompareRequest):
 
 @router.post("/chat")
 def research_chat_assistant(req: ChatRequest):
-    q_clean = req.query.lower()
-    candidate_name = req.context_drug_name or "Donepezil"
-    disease_name = req.context_disease_name or "Alzheimer's Disease"
+    """
+    The research assistant.
 
-    # Search for active candidate in cache or dataset
-    target_drug = next(
-        (d for d in list(ACTIVE_SEARCH_RESULTS_CACHE.values()) + CANDIDATE_DRUGS + LARGE_DRUG_BANK if d.get("name", "").lower() == candidate_name.lower()),
-        None
+    Answers with Gemini when GEMINI_API_KEY is set, and from the result data
+    itself otherwise - see app/core/assistant.py. The response says which,
+    because presenting a rule-based answer as a language model's would be a
+    straightforward lie and the interface shows the difference.
+
+    Candidates come from the request rather than from ACTIVE_SEARCH_RESULTS_CACHE
+    so the assistant is grounded in what this user is looking at, not in
+    whatever search the server handled most recently.
+    """
+    candidates = req.candidates
+    if not candidates:
+        # Nothing sent: fall back to the server's most recent run, which is
+        # better than nothing for a fresh tab.
+        candidates = list(ACTIVE_SEARCH_RESULTS_CACHE.values())[:8]
+
+    result = assistant.answer(
+        query=req.query,
+        history=[turn.model_dump() for turn in req.history],
+        disease_name=req.context_disease_name,
+        candidates=candidates,
+        context_drug_name=req.context_drug_name,
     )
-
-    docking_g = target_drug.get("docking_delta_g", -11.2) if target_drug else -11.2
-    est_ki = target_drug.get("estimated_ki_nm", 18.5) if target_drug else 18.5
-    target_gene = target_drug.get("target_gene", "ACHE") if target_drug else "ACHE"
-    lincs_score = round(float(target_drug.get("lincs_reversal_score", 0.895)) * 100, 1) if target_drug else 89.5
-    gnn_score = round(float(target_drug.get("gnn_dti_score", 0.942)) * 100, 1) if target_drug else 94.2
-    safety = round(float(target_drug.get("safety_score", 0.92)) * 100, 0) if target_drug else 92
-
-    if "binding" in q_clean or "docking" in q_clean or "affinity" in q_clean or "thermodynamics" in q_clean:
-        answer = (
-            f"According to closed-loop AutoDock Vina physics validation (Paper C9 Section II-F), **{candidate_name}** exhibits a strong binding free energy "
-            f"$$\\Delta G = {docking_g}\\text{{ kcal/mol}}$$ against its primary protein target **{target_gene}**, yielding an estimated inhibition constant "
-            f"$$K_i = {est_ki}\\text{{ nM}}$$. Key active-site interactions involve high-affinity hydrogen bonding and catalytic residue stabilization, "
-            f"confirming biophysical pose stability as validated in *SperoPredictor* [13]."
-        )
-    elif "safety" in q_clean or "toxicity" in q_clean or "side effect" in q_clean or "admet" in q_clean:
-        answer = (
-            f"**{candidate_name}** demonstrates an estimated ADMET Safety Likelihood Score of **{safety}%** (Paper C9 Section II-E). "
-            f"As an established FDA-approved compound, its pharmacokinetic, toxicological, and safety profiles are well characterized in DrugBank [18] "
-            f"and Europe PMC literature, drastically compressing clinical trial timelines from >10 years down to months [1]."
-        )
-    elif "mechanism" in q_clean or "lincs" in q_clean or "transcriptomic" in q_clean or "omics" in q_clean:
-        answer = (
-            f"**{candidate_name}** acts via DeepDRK Multi-Kernel Similarity Fusion (Paper C9 Section II-C, Wang et al. [12]). "
-            f"It achieves a **{lincs_score}% LINCS L1000 transcriptomic signature reversal**, effectively neutralizing disease-associated gene perturbation profiles "
-            f"and modulating upstream signaling pathways for **{disease_name}**."
-        )
-    elif "citation" in q_clean or "paper" in q_clean or "benchmark" in q_clean or "accuracy" in q_clean:
-        answer = (
-            f"The **Autonomous Drug Repurposing Discovery Pipeline** (GRIET Hyderabad, Paper C9) unifies GNN DTI prediction (94.2% accuracy), "
-            f"DisGeNET disease-gene modeling (91.8%), and closed-loop AutoDock Vina docking into a single ensemble achieving **95.6% overall test accuracy** [Table I]. "
-            f"This outperforms legacy baselines including *DeepDRA* (87.2%) [11] and *SperoPredictor* (91.4%) [13]."
-        )
-    else:
-        answer = (
-            f"Based on multi-omics data integration (LINCS L1000 reversal = **{lincs_score}%**), GNN DTI topological scoring (**{gnn_score}%**), "
-            f"and PubMed literature mining, **{candidate_name}** is ranked as a top candidate for **{disease_name}** (Target: `{target_gene}`). "
-            f"It combines high GNN topological probability with confirmed biophysical 3D docking stability ($\\Delta G = {docking_g}\\text{{ kcal/mol}}$)."
-        )
 
     return {
         "query": req.query,
-        "answer": answer
+        "answer": result["answer"],
+        "source": result["source"],
+        "disclaimer": "Research tool. Not medical advice.",
     }
 
