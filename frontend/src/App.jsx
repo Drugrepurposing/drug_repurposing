@@ -20,6 +20,7 @@ import CommandPalette from './components/CommandPalette.jsx';
 import ResultsSkeleton from './components/ResultsSkeleton.jsx';
 import LivePipelineFeed from './components/LivePipelineFeed.jsx';
 import PipelineSummary from './components/PipelineSummary.jsx';
+import DiscoveryGraph from './components/DiscoveryGraph.jsx';
 import usePacedStages from './hooks/usePacedStages.js';
 import { runSearchStreaming } from './lib/streamSearch.js';
 import { useAuth } from './context/auth-context.js';
@@ -267,9 +268,18 @@ export default function App() {
                   totalMs={pipelineResult.duration_ms}
                 />
 
-                <AgentProgressFeed 
-                  logs={pipelineResult.pipeline_logs} 
-                  isRunning={isSearching} 
+                {/* The same candidates as the table below, arranged as the
+                    graph they were found in. Clicking a compound opens the
+                    same explainability panel the table's button opens, so
+                    there is one behaviour rather than two. */}
+                <DiscoveryGraph
+                  result={pipelineResult}
+                  onSelectCandidate={(cand) => setSelectedExplainCandidate(cand)}
+                />
+
+                <AgentProgressFeed
+                  logs={pipelineResult.pipeline_logs}
+                  isRunning={isSearching}
                 />
 
                 <CandidateTable

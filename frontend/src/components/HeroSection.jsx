@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, Sparkles, ArrowRight, Network, Clock, Command } from 'lucide-react';
 import MolecularScene3D from './MolecularScene3D.jsx';
+import MolecularAmbience from './MolecularAmbience.jsx';
 import api from '../api.js';
 import { useAuth } from '../context/auth-context.js';
 
@@ -78,8 +79,13 @@ export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
   );
 
   return (
-    <section className="surface-veil pt-14 pb-12 px-4 border-b border-slate-200/80">
-      <div className="max-w-4xl mx-auto text-center">
+    <section className="surface-veil relative overflow-hidden pt-14 pb-12 px-4 border-b border-slate-200/80">
+      {/* Drifting rings, backbones and helices behind the hero. Decorative and
+          pointer-transparent, so it never intercepts a click meant for the
+          search box sitting on top of it. */}
+      <MolecularAmbience />
+
+      <div className="relative z-10 max-w-4xl mx-auto text-center">
         {/* Subtle Pill */}
         <div className="hero-sub inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium mb-7">
           <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
