@@ -10,11 +10,12 @@ import { useTheme } from '../context/theme-context.js';
  * anywhere: nothing in this file draws a line.
  *
  * HOW IT IS DRAWN, WHICH IS THE WHOLE TRICK. Everything is painted into a
- * 256x160 offscreen buffer and then blitted up to the full window in one call.
- * Bilinear upscaling of a smooth gradient IS a blur, and a good one: a shape
- * one pixel across in the buffer arrives on screen eight pixels wide with a
- * soft edge. So a curtain can be drawn as an ordinary filled path and still
- * land as diffuse light with nothing hard-edged anywhere.
+ * 256x160 offscreen buffer, blurred by two pixels, and then blitted up to the
+ * full window in one call. Bilinear upscaling of a smooth gradient IS a blur,
+ * and a good one: a shape one pixel across in the buffer arrives on screen
+ * eight pixels wide with a soft edge, and the two-pixel blur before it becomes
+ * sixteen. So a curtain can be drawn as an ordinary filled path and still land
+ * as diffuse light with nothing hard-edged anywhere.
  *
  * That approach was arrived at by measurement, not taste. The colour pools
  * were originally CSS elements with filter: blur(90px), which ran at 6 frames
@@ -32,6 +33,14 @@ import { useTheme } from '../context/theme-context.js';
  * is invisible, and what the eye follows is a band of light bending rather
  * than an edge moving.
  *
+ * WHAT MAKES THEM MIX. Three things together, because any one alone leaves
+ * the curtains sitting in visible lanes: every curtain's light reaches most of
+ * the way down the buffer, so all five overlap nearly everywhere; each fades
+ * out along a long tail rather than stopping, so where one ends another is
+ * already at strength; and the blur before the upscale dissolves whatever
+ * boundary survives the first two. An earlier version had shallow depths and
+ * short fades, and read as five separate bands.
+ *
  * The canvas is pointer-transparent and behind the page's own stacking
  * context, so it can never intercept a click. Under prefers-reduced-motion it
  * paints one still frame, caught mid-wave.
@@ -44,13 +53,13 @@ const PALETTE = {
     orbAlpha: 0.50,
     // Curtains: the part that waves.
     curtains: ['#38bdf8', '#818cf8', '#5eead4', '#93c5fd', '#c7d2fe'],
-    curtainAlpha: 0.26,
+    curtainAlpha: 0.23,
   },
   dark: {
     orbs: ['#0ea5e9', '#4f46e5', '#0d9488', '#6d28d9'],
     orbAlpha: 0.38,
     curtains: ['#0ea5e9', '#6366f1', '#14b8a6', '#2563eb', '#7c3aed'],
-    curtainAlpha: 0.26,
+    curtainAlpha: 0.25,
   },
 };
 
@@ -85,7 +94,13 @@ const ORBS = [
 ];
 
 /**
- * The waving curtains, back to front.
+ * The waving curtains.
+ *
+ * `depth` is close to or above 1 on every one of them, which is the point:
+ * each curtain's light reaches most of the way down the buffer, so all five
+ * overlap almost everywhere and the field reads as one body of colour rather
+ * than as five bands with gaps between them. An earlier version gave each a
+ * shallow depth and they separated visibly into stripes.
  *
  *   base    resting height, as a fraction of buffer height
  *   depth   how far the light reaches below that line before it fades out
@@ -95,49 +110,63 @@ const ORBS = [
  */
 const CURTAINS = [
   {
-    base: 0.18, depth: 0.62, colour: 0, alpha: 1.0,
+    base: 0.10, depth: 1.15, colour: 0, alpha: 1.0,
     terms: [
-      { amp: 0.085, len: 1.15, spd: 0.000141 },
-      { amp: 0.042, len: 0.47, spd: -0.000097 },
-      { amp: 0.018, len: 0.23, spd: 0.000203 },
+      { amp: 0.135, len: 1.15, spd: 0.000141 },
+      { amp: 0.062, len: 0.47, spd: -0.000097 },
+      { amp: 0.026, len: 0.23, spd: 0.000203 },
     ],
   },
   {
-    base: 0.36, depth: 0.55, colour: 1, alpha: 0.92,
+    base: 0.30, depth: 1.05, colour: 1, alpha: 0.92,
     terms: [
-      { amp: 0.078, len: 0.88, spd: -0.000113 },
-      { amp: 0.046, len: 0.39, spd: 0.000162 },
-      { amp: 0.020, len: 0.19, spd: -0.000178 },
+      { amp: 0.124, len: 0.88, spd: -0.000113 },
+      { amp: 0.068, len: 0.39, spd: 0.000162 },
+      { amp: 0.029, len: 0.19, spd: -0.000178 },
     ],
   },
   {
-    base: 0.54, depth: 0.50, colour: 2, alpha: 0.85,
+    base: 0.50, depth: 0.98, colour: 2, alpha: 0.85,
     terms: [
-      { amp: 0.092, len: 1.32, spd: 0.000089 },
-      { amp: 0.038, len: 0.53, spd: -0.000149 },
-      { amp: 0.016, len: 0.26, spd: 0.000221 },
+      { amp: 0.146, len: 1.32, spd: 0.000089 },
+      { amp: 0.057, len: 0.53, spd: -0.000149 },
+      { amp: 0.024, len: 0.26, spd: 0.000221 },
     ],
   },
   {
-    base: 0.72, depth: 0.44, colour: 3, alpha: 0.90,
+    base: 0.70, depth: 0.90, colour: 3, alpha: 0.90,
     terms: [
-      { amp: 0.081, len: 0.96, spd: -0.000127 },
-      { amp: 0.044, len: 0.43, spd: 0.000108 },
-      { amp: 0.019, len: 0.21, spd: -0.000191 },
+      { amp: 0.129, len: 0.96, spd: -0.000127 },
+      { amp: 0.065, len: 0.43, spd: 0.000108 },
+      { amp: 0.028, len: 0.21, spd: -0.000191 },
     ],
   },
   {
-    base: 0.90, depth: 0.34, colour: 4, alpha: 0.78,
+    base: 0.90, depth: 0.80, colour: 4, alpha: 0.78,
     terms: [
-      { amp: 0.070, len: 1.08, spd: 0.000101 },
-      { amp: 0.040, len: 0.36, spd: -0.000133 },
-      { amp: 0.017, len: 0.17, spd: 0.000167 },
+      { amp: 0.112, len: 1.08, spd: 0.000101 },
+      { amp: 0.060, len: 0.36, spd: -0.000133 },
+      { amp: 0.025, len: 0.17, spd: 0.000167 },
     ],
   },
 ];
 
+/**
+ * Multiplies every speed in the file. One dial for "faster" or "calmer"
+ * without having to keep thirty numbers in proportion by hand.
+ */
+const FLOW = 1.8;
+
+/**
+ * Blur applied to the buffer before it is stretched over the window, in buffer
+ * pixels. Two here becomes roughly sixteen on a 1080p screen, which is
+ * what dissolves any remaining boundary where one curtain's tail meets
+ * another. It costs one blurred draw of a 256x160 image per frame.
+ */
+const BUFFER_BLUR = 2;
+
 /** The slow breath that swells and settles the whole aurora. */
-const SWELL_SPEED = 0.000047;
+const SWELL_SPEED = 0.000068;
 const SWELL_DEPTH = 0.30;
 
 /** How far the aurora lags the page as it scrolls. Depth, not motion. */
@@ -170,6 +199,18 @@ export default function AuroraBackdrop() {
     const bufferContext = buffer.getContext('2d');
     if (!bufferContext) return undefined;
 
+    // A second small canvas, holding the blurred copy. Blurring in place is
+    // not possible - a canvas cannot read and write itself in one draw - and
+    // blurring on the way to the screen would mean a filter over a full 1080p
+    // surface every frame, which is the cost this whole design exists to
+    // avoid. Here it is one blurred draw of a 256x160 image.
+    const blurred = document.createElement('canvas');
+    blurred.width = BUFFER_WIDTH;
+    blurred.height = BUFFER_HEIGHT;
+    const blurredContext = blurred.getContext('2d');
+    if (!blurredContext) return undefined;
+    const canBlur = typeof blurredContext.filter === 'string';
+
     let width = 0;
     let height = 0;
 
@@ -188,11 +229,11 @@ export default function AuroraBackdrop() {
 
     const drawOrbs = (elapsed, shift) => {
       ORBS.forEach((orb) => {
-        const cx = (orb.x + orb.ax * Math.sin(elapsed * orb.sx + orb.phase)) * BUFFER_WIDTH;
-        const cy = (orb.y + orb.ay * Math.sin(elapsed * orb.sy + orb.phase * 1.7) + shift)
+        const cx = (orb.x + orb.ax * Math.sin(elapsed * orb.sx * FLOW + orb.phase)) * BUFFER_WIDTH;
+        const cy = (orb.y + orb.ay * Math.sin(elapsed * orb.sy * FLOW + orb.phase * 1.7) + shift)
           * BUFFER_HEIGHT;
         const radius = orb.r * BUFFER_WIDTH
-          * (1 + 0.10 * Math.sin(elapsed * orb.sx * 1.4 + orb.phase));
+          * (1 + 0.10 * Math.sin(elapsed * orb.sx * 1.4 * FLOW + orb.phase));
         const colour = theme.orbs[orb.colour];
 
         const gradient = bufferContext.createRadialGradient(cx, cy, 0, cx, cy, radius);
@@ -216,7 +257,7 @@ export default function AuroraBackdrop() {
           let y = base;
           for (let t = 0; t < curtain.terms.length; t += 1) {
             const term = curtain.terms[t];
-            y += Math.sin((TAU * x) / (term.len * BUFFER_WIDTH) + elapsed * term.spd)
+            y += Math.sin((TAU * x) / (term.len * BUFFER_WIDTH) + elapsed * term.spd * FLOW)
               * term.amp * BUFFER_HEIGHT * swell;
           }
           bufferContext.lineTo(x, y);
@@ -224,16 +265,19 @@ export default function AuroraBackdrop() {
         bufferContext.lineTo(BUFFER_WIDTH + STEP, BUFFER_HEIGHT + STEP);
         bufferContext.closePath();
 
-        // Nothing at the boundary, swelling just below it, gone by the bottom.
-        // Starting at zero is what keeps the wave's edge from reading as a
-        // line: the shape is visible, its outline is not.
+        // Nothing at the boundary, swelling just below it, then a long slow
+        // tail rather than a quick fade. Two things depend on this shape:
+        // starting at zero keeps the wave's edge from reading as a line, and
+        // the long tail is what carries each curtain into the ones below it so
+        // the colours mix instead of sitting in their own lanes.
         const gradient = bufferContext.createLinearGradient(
           0, base - curtain.terms[0].amp * BUFFER_HEIGHT, 0, base + depth,
         );
         const peak = theme.curtainAlpha * curtain.alpha;
         gradient.addColorStop(0, withAlpha(colour, 0));
-        gradient.addColorStop(0.30, withAlpha(colour, peak));
-        gradient.addColorStop(0.62, withAlpha(colour, peak * 0.45));
+        gradient.addColorStop(0.16, withAlpha(colour, peak));
+        gradient.addColorStop(0.40, withAlpha(colour, peak * 0.72));
+        gradient.addColorStop(0.72, withAlpha(colour, peak * 0.34));
         gradient.addColorStop(1, withAlpha(colour, 0));
         bufferContext.fillStyle = gradient;
         bufferContext.fill();
@@ -243,7 +287,7 @@ export default function AuroraBackdrop() {
     const draw = (elapsed) => {
       if (width === 0 || height === 0) return;
 
-      const swell = 1 - SWELL_DEPTH + SWELL_DEPTH * Math.sin(elapsed * SWELL_SPEED);
+      const swell = 1 - SWELL_DEPTH + SWELL_DEPTH * Math.sin(elapsed * SWELL_SPEED * FLOW);
       // Scroll moves the aurora a little less than the page, which reads as
       // depth. Expressed as a fraction of the buffer so it survives the blit.
       const shift = (-scrollRef.current * PARALLAX) / Math.max(height, 1);
@@ -253,7 +297,21 @@ export default function AuroraBackdrop() {
       drawCurtains(elapsed, shift, swell);
 
       context.clearRect(0, 0, width, height);
-      context.drawImage(buffer, 0, 0, width, height);
+
+      if (canBlur) {
+        // Three buffer pixels of blur become roughly two dozen on screen after
+        // the upscale, which is what dissolves the last trace of a boundary
+        // where one curtain's tail meets the next. Older browsers without
+        // canvas filter support simply get the unblurred field, which the
+        // upscale already softens considerably.
+        blurredContext.clearRect(0, 0, BUFFER_WIDTH, BUFFER_HEIGHT);
+        blurredContext.filter = `blur(${BUFFER_BLUR}px)`;
+        blurredContext.drawImage(buffer, 0, 0);
+        blurredContext.filter = 'none';
+        context.drawImage(blurred, 0, 0, width, height);
+      } else {
+        context.drawImage(buffer, 0, 0, width, height);
+      }
     };
 
     resize();
