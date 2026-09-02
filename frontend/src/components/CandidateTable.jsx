@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Box, HelpCircle, ArrowRightLeft, CheckCircle2, Download, ThumbsUp, ThumbsDown, BookOpen, Sparkles, ArrowUp, ArrowDown, ChevronsUpDown, Filter } from 'lucide-react';
+import { Box, HelpCircle, ArrowRightLeft, CheckCircle2, Download, ThumbsUp, ThumbsDown, BookOpen, Sparkles, ArrowUp, ArrowDown, ChevronsUpDown, Filter, Layers, X } from 'lucide-react';
 import AnimatedPercent from './AnimatedPercent.jsx';
+import { MAX_COMPARE } from '../lib/compareDimensions.js';
 
 /**
  * Sortable columns.
@@ -21,19 +22,49 @@ const SORT_COLUMNS = {
   overall: { label: 'Overall',    accessor: (c) => c.final_score ?? c.overall_score ?? c.gnn_dti_score, direction: 'desc' },
 };
 
-export default function CandidateTable({ 
-  candidates, 
-  diseaseInfo, 
-  onSelect3D, 
-  onSelectExplain, 
-  onSelectCompare, 
-  onExportPDF, 
-  onFeedback 
+export default function CandidateTable({
+  candidates,
+  diseaseInfo,
+  onSelect3D,
+  onSelectExplain,
+  onSelectCompare,
+  onCompareSelection,
+  onExportPDF,
+  onFeedback
 }) {
   const [feedbackState, setFeedbackState] = useState({});
   const [sortKey, setSortKey] = useState('rank');
   const [sortDirection, setSortDirection] = useState('asc');
   const [validatedOnly, setValidatedOnly] = useState(false);
+
+  /**
+   * Comparison selection, held as FIXED SLOTS rather than a list.
+   *
+   * Colour in the comparison identifies the compound, so slot 2 must stay slot
+   * 2 when slot 1 is unticked. A plain array would shift everything down and
+   * silently repaint a reader's mental "Donepezil is blue" - the classic
+   * recolour-on-filter mistake. Nulling the slot in place avoids it entirely.
+   */
+  const [slots, setSlots] = useState([null, null, null]);
+  const selectedIds = slots.filter(Boolean);
+
+  const toggleCompare = (id) => {
+    setSlots((current) => {
+      const at = current.indexOf(id);
+      if (at !== -1) {
+        const next = [...current];
+        next[at] = null;
+        return next;
+      }
+      const free = current.indexOf(null);
+      if (free === -1) return current; // already at the cap
+      const next = [...current];
+      next[free] = id;
+      return next;
+    });
+  };
+
+  const clearCompare = () => setSlots([null, null, null]);
 
   const handleRating = (drugId, rating, drugName) => {
     setFeedbackState(prev => ({ ...prev, [drugId]: rating }));
@@ -76,6 +107,18 @@ export default function CandidateTable({
   if (!candidates || candidates.length === 0) return null;
 
   const validatedCount = candidates.filter((c) => c.validation_passed).length;
+
+  // Each entry carries the SLOT it was assigned, not just the compound. The
+  // slot is the colour, and filtering the empty slots out of an array would
+  // collapse the indices - so unticking the first of three would silently
+  // repaint the other two, which is the exact mistake the slot scheme exists
+  // to prevent. Caught by a browser test rather than by reading.
+  const compareSet = slots
+    .map((id, slot) => {
+      const candidate = id ? candidates.find((c) => c.id === id) : null;
+      return candidate ? { candidate, slot } : null;
+    })
+    .filter(Boolean);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -139,6 +182,9 @@ export default function CandidateTable({
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 text-slate-500 font-mono text-[11px] uppercase tracking-wider border-b border-slate-200">
               <tr>
+                <th className="py-3 pl-4 pr-1 w-9">
+                  <span className="sr-only">Select for comparison</span>
+                </th>
                 <SortableHeader label="Rank" columnKey="rank" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <SortableHeader label="Drug Candidate" columnKey="name" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} align="left" />
                 <th className="py-3 px-4">Target Gene</th>
@@ -157,6 +203,23 @@ export default function CandidateTable({
                   className="anim-rise hover:bg-slate-50/80 transition-colors"
                   style={{ animationDelay: `${rowIndex * 70}ms` }}
                 >
+                  {/* Compare selection. A real checkbox, so it is reachable by
+                      keyboard, announced as checked, and togglable with space
+                      without any handler of ours. */}
+                  <td className="py-3.5 pl-4 pr-1">
+                    <input
+                      type="checkbox"
+                      checked={slots.includes(cand.id)}
+                      disabled={!slots.includes(cand.id) && selectedIds.length >= MAX_COMPARE}
+                      onChange={() => toggleCompare(cand.id)}
+                      aria-label={`Compare ${cand.name}`}
+                      title={!slots.includes(cand.id) && selectedIds.length >= MAX_COMPARE
+                        ? `Comparison holds ${MAX_COMPARE} candidates - untick one first`
+                        : `Compare ${cand.name}`}
+                      className="w-4 h-4 rounded border-slate-300 text-brand accent-indigo-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </td>
+
                   {/* Rank */}
                   <td className="py-3.5 px-4 text-center">
                     <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
@@ -307,6 +370,54 @@ export default function CandidateTable({
           </table>
         </div>
       </div>
+
+      {/* The selection bar. Appears only once there is something to compare,
+          and sits fixed at the bottom of the viewport rather than under the
+          table: the tick that completes a selection is often several rows up,
+          and a button that scrolls away the moment you use it is no button. */}
+      {selectedIds.length > 0 && (
+        <div className="fixed inset-x-0 bottom-4 z-30 px-4 pointer-events-none">
+          <div
+            className="clean-card surface-veil mx-auto max-w-lg rounded-full shadow-lg px-3 py-2 flex items-center gap-3 pointer-events-auto anim-rise"
+            role="status"
+          >
+            <div className="flex items-center gap-1.5 pl-1 min-w-0">
+              {compareSet.map(({ candidate, slot }) => (
+                <span
+                  key={candidate.id}
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ background: `var(--cmp-series-${slot + 1})` }}
+                  title={candidate.name}
+                />
+              ))}
+              <span className="text-xs text-slate-700 truncate ml-1">
+                {selectedIds.length === 1
+                  ? '1 selected — pick one more'
+                  : `${selectedIds.length} selected`}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onCompareSelection?.(compareSet)}
+              disabled={selectedIds.length < 2}
+              className="ml-auto px-3.5 py-1.5 rounded-full bg-brand hover:bg-brand-hover text-white text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              Compare
+            </button>
+
+            <button
+              type="button"
+              onClick={clearCompare}
+              aria-label="Clear comparison selection"
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

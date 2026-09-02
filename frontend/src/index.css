@@ -170,6 +170,43 @@ html.dark {
   --viz-grid: #222b3a;
 }
 
+/* ----------------------------------------------------------------------------
+   COMPARISON SERIES
+
+   The one place in the application where colour encodes IDENTITY rather than
+   magnitude: which of the compared compounds a bar or a polygon belongs to.
+   Everything else stays single-hue, for the reasons above.
+
+   Three slots, not four, and that is a limit rather than a shortage. These
+   were validated against this application's own card surfaces (#ffffff light,
+   #171f2b dark) on the ALL-PAIRS test, which is the right test here because a
+   radar overlays every series on every other:
+
+     light  #2a78d6 / #eb6834 / #1baf7a
+            worst pair CVD dE 9.2 (target >= 8), normal vision dE 24.0 (floor 15)
+     dark   #3987e5 / #d95926 / #199e70
+            worst pair CVD dE 9.4, normal vision dE 20.9, all >= 3:1 on surface
+
+   A fourth slot would put yellow beside orange, which fails both floors - so
+   the comparison is capped at three compounds rather than generating a hue
+   that a colour-blind reader cannot separate from one already on screen.
+
+   The light aqua sits at 2.82:1 against white, below the 3:1 mark. That is
+   permitted only with relief, which is why the comparison always ships the
+   value table: no number in it depends on telling two colours apart.
+   ---------------------------------------------------------------------------- */
+:root {
+  --cmp-series-1: #2a78d6;
+  --cmp-series-2: #eb6834;
+  --cmp-series-3: #1baf7a;
+}
+
+html.dark {
+  --cmp-series-1: #3987e5;
+  --cmp-series-2: #d95926;
+  --cmp-series-3: #199e70;
+}
+
 @layer base {
   :root {
     /* A high-contrast optical serif for page titles, paired with a neutral
