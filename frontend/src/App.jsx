@@ -13,6 +13,7 @@ import CandidateTable from './components/CandidateTable';
 import MoleculeViewer3D from './components/MoleculeViewer3D';
 import ExplainabilityModal from './components/ExplainabilityModal';
 import DrugCompareModal from './components/DrugCompareModal';
+import MultiCompareModal from './components/MultiCompareModal.jsx';
 import ResearchChatbot from './components/ResearchChatbot';
 import TeamSection from './components/TeamSection';
 import AuthModal from './components/AuthModal.jsx';
@@ -49,6 +50,7 @@ export default function App() {
   const [selected3DCandidate, setSelected3DCandidate] = useState(null);
   const [selectedExplainCandidate, setSelectedExplainCandidate] = useState(null);
   const [selectedCompareCandidate, setSelectedCompareCandidate] = useState(null);
+  const [compareSelection, setCompareSelection] = useState(null);
 
   // Signing out while on "My Research" would otherwise leave the page showing a
   // tab that no longer exists in the navbar. Deriving the visible tab during
@@ -289,6 +291,7 @@ export default function App() {
                   onSelect3D={(cand) => setSelected3DCandidate(cand)}
                   onSelectExplain={(cand) => setSelectedExplainCandidate(cand)}
                   onSelectCompare={(cand) => setSelectedCompareCandidate(cand)}
+                  onCompareSelection={(list) => setCompareSelection(list)}
                   onExportPDF={handleExportPDF}
                   onFeedback={handleFeedback}
                 />
@@ -335,6 +338,14 @@ export default function App() {
           candidate={selectedExplainCandidate}
           diseaseName={pipelineResult?.disease?.name || 'Target Indication'}
           onClose={() => setSelectedExplainCandidate(null)}
+        />
+      )}
+
+      {compareSelection && compareSelection.length >= 2 && (
+        <MultiCompareModal
+          selection={compareSelection}
+          diseaseName={pipelineResult?.disease?.name}
+          onClose={() => setCompareSelection(null)}
         />
       )}
 
