@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from './api';
 // Photographic / video background. To go back to the generated molecular
 // field instead, import AmbientBackdrop.jsx here and swap the tag below.
@@ -16,13 +16,18 @@ import ResearchChatbot from './components/ResearchChatbot';
 import TeamSection from './components/TeamSection';
 import AuthModal from './components/AuthModal.jsx';
 import ResearchDashboard from './components/ResearchDashboard.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
+import ResultsSkeleton from './components/ResultsSkeleton.jsx';
 import { useAuth } from './context/auth-context.js';
+import { useToast } from './context/toast-context.js';
 import { AlertCircle, Lightbulb } from 'lucide-react';
 
 export default function App() {
   const { isAuthenticated } = useAuth();
+  const { notify } = useToast();
   const [activeTab, setActiveTab] = useState('home');
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [pipelineResult, setPipelineResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -38,6 +43,21 @@ export default function App() {
   // render, rather than correcting it afterwards in an effect, means there is
   // never a frame where the two disagree.
   const visibleTab = activeTab === 'research' && !isAuthenticated ? 'home' : activeTab;
+
+  // Ctrl/Cmd + K from anywhere. Registered once on the document rather than on
+  // a focusable element, because the whole point is that it works without the
+  // user having first clicked something. preventDefault stops Firefox
+  // hijacking the combination for its own search bar.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const handleSearch = async (diseaseQuery) => {
     // Reached from the search box and from the "run again" button in the
@@ -94,19 +114,39 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      notify('Report downloaded', { detail: `Repurposing_Report_${diseaseName}.pdf` });
     } catch (err) {
       console.error("PDF generation failed:", err);
+      notify('Could not generate the PDF report', {
+        variant: 'error',
+        detail: 'The analysis server may still be waking up.',
+      });
     }
   };
 
-  const handleFeedback = async (drugId, rating) => {
+  const handleFeedback = async (drugId, rating, drugName) => {
     try {
-      await api.post('/api/feedback', {
+      const res = await api.post('/api/feedback', {
         drug_id: drugId,
-        rating: rating
+        rating: rating,
+        drug_name: drugName,
+        disease_name: pipelineResult?.disease?.name,
       });
+      // Reporting whether it was PERSISTED, not merely accepted. The endpoint
+      // returns `stored`, and telling someone their expert judgement was
+      // recorded when it went nowhere would be worse than saying nothing.
+      notify(
+        rating === 'up' ? 'Marked as supported' : 'Marked as rejected',
+        res.data?.stored
+          ? { variant: 'success', detail: `${drugName || drugId} · saved to your validation record` }
+          : { variant: 'info', detail: 'Recorded for this session only — no database configured' },
+      );
     } catch (err) {
       console.error("Feedback submission error:", err);
+      notify('Could not record your assessment', {
+        variant: 'error',
+        detail: 'Please try again in a moment.',
+      });
     }
   };
 
@@ -131,7 +171,11 @@ export default function App() {
         {visibleTab === 'home' && (
           <>
             {/* Hero Section */}
-            <HeroSection onSearch={handleSearch} isSearching={isSearching} />
+            <HeroSection
+              onSearch={handleSearch}
+              isSearching={isSearching}
+              onOpenPalette={() => setPaletteOpen(true)}
+            />
 
             {/* Error & Suggestion Banner */}
             {errorMessage && (
@@ -164,6 +208,11 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* While the pipeline runs, a shaped placeholder holds the page
+                height steady so results appear in place rather than shoving
+                the layout down as the user starts reading. */}
+            {isSearching && !pipelineResult && <ResultsSkeleton />}
 
             {/* Results Section */}
             {pipelineResult && (
@@ -205,6 +254,13 @@ export default function App() {
 
       {/* Modals */}
       {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
+
+      {paletteOpen && <CommandPalette
+        onClose={() => setPaletteOpen(false)}
+        onSearch={handleSearch}
+        onNavigate={setActiveTab}
+        onSignInClick={() => setAuthModalOpen(true)}
+      />}
 
       {selected3DCandidate && (
         <MoleculeViewer3D 

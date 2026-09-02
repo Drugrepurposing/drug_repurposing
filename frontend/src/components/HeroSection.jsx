@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Sparkles, ArrowRight, Network } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Search, Sparkles, ArrowRight, Network, Clock, Command } from 'lucide-react';
 import MolecularScene3D from './MolecularScene3D.jsx';
+import api from '../api.js';
+import { useAuth } from '../context/auth-context.js';
 
 const PRESET_DISEASES = [
   { key: "alzheimers", label: "Alzheimer's Disease", icon: "🧠" },
@@ -13,12 +15,55 @@ const PRESET_DISEASES = [
   { key: "glioblastoma", label: "Glioblastoma", icon: "🧠" },
 ];
 
-export default function HeroSection({ onSearch, isSearching }) {
+export default function HeroSection({ onSearch, isSearching, onOpenPalette }) {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [recent, setRecent] = useState([]);
+  const [showRecent, setShowRecent] = useState(false);
+  const searchWrapRef = useRef(null);
+
+  // The user's own past searches, fetched once per sign-in rather than on every
+  // focus - the list barely changes and a request per keystroke-adjacent event
+  // would be wasteful against a free-tier database.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      // Signing out must clear the previous account's searches immediately.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRecent([]);
+      return undefined;
+    }
+    let cancelled = false;
+    api.get('/api/history', { params: { limit: 5 } })
+      .then((res) => {
+        if (cancelled) return;
+        const seen = new Set();
+        setRecent(
+          (res.data.items || [])
+            .map((item) => item.disease_query)
+            .filter((q) => q && !seen.has(q.toLowerCase()) && seen.add(q.toLowerCase()))
+            .slice(0, 4),
+        );
+      })
+      .catch(() => { /* the search box works perfectly well without history */ });
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
+  // Close the dropdown on an outside click. Not on blur: blur fires before the
+  // click lands on a suggestion, so the list would disappear out from under
+  // the pointer and the click would hit whatever ended up in its place.
+  useEffect(() => {
+    if (!showRecent) return undefined;
+    const onPointerDown = (event) => {
+      if (!searchWrapRef.current?.contains(event.target)) setShowRecent(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [showRecent]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      setShowRecent(false);
       onSearch(searchQuery.trim());
     }
   };
@@ -27,6 +72,10 @@ export default function HeroSection({ onSearch, isSearching }) {
     setSearchQuery(label);
     onSearch(label);
   };
+
+  const suggestions = recent.filter(
+    (item) => !searchQuery.trim() || item.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+  );
 
   return (
     <section className="surface-veil pt-14 pb-12 px-4 border-b border-slate-200/80">
@@ -49,7 +98,7 @@ export default function HeroSection({ onSearch, isSearching }) {
         </p>
 
         {/* Search Bar */}
-        <form onSubmit={handleSubmit} className="hero-search max-w-xl mx-auto mb-6">
+        <form onSubmit={handleSubmit} className="hero-search max-w-xl mx-auto mb-6 relative" ref={searchWrapRef}>
           <div className="bg-slate-50 rounded-xl p-1.5 flex items-center gap-2 border border-slate-300 shadow-sm focus-within:bg-surface focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
             <div className="pl-3 text-slate-400">
               <Search className="w-5 h-5 text-slate-400" />
@@ -57,10 +106,27 @@ export default function HeroSection({ onSearch, isSearching }) {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setShowRecent(true); }}
+              onFocus={() => setShowRecent(true)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setShowRecent(false); }}
               placeholder="Enter a disease name (e.g. Alzheimer's, Parkinson's, ALS)..."
+              autoComplete="off"
+              aria-autocomplete="list"
               className="w-full bg-transparent text-slate-900 placeholder-slate-400 text-sm focus:outline-none py-2 px-1 font-medium"
             />
+
+            {/* Discoverability for the palette. A shortcut nobody knows about
+                may as well not exist, so the key hint lives where people
+                already look when they intend to search. */}
+            <button
+              type="button"
+              onClick={onOpenPalette}
+              title="Open command palette"
+              aria-label="Open command palette"
+              className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-300 bg-surface text-[10px] font-mono text-slate-500 hover:text-slate-800 hover:border-slate-400 transition-colors cursor-pointer shrink-0"
+            >
+              <Command className="w-3 h-3" />K
+            </button>
             <button
               type="submit"
               disabled={isSearching || !searchQuery.trim()}
@@ -79,6 +145,34 @@ export default function HeroSection({ onSearch, isSearching }) {
               )}
             </button>
           </div>
+
+          {showRecent && suggestions.length > 0 && (
+            <ul
+              className="absolute z-20 left-0 right-0 mt-1.5 rounded-xl bg-surface border border-slate-200 shadow-lg overflow-hidden text-left anim-rise"
+              aria-label="Recent searches"
+            >
+              <li className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Your recent searches
+              </li>
+              {suggestions.map((item) => (
+                <li key={item}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      setSearchQuery(item);
+                      setShowRecent(false);
+                      onSearch(item);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate">{item}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </form>
 
         {/* Preset Chips */}

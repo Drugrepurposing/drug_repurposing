@@ -4,6 +4,7 @@ import {
   ThumbsUp, Trash2, TrendingUp,
 } from 'lucide-react';
 import api from '../api.js';
+import { useToast } from '../context/toast-context.js';
 import ActivityChart from './ActivityChart.jsx';
 
 /**
@@ -150,6 +151,7 @@ function formatTimestamp(iso) {
 }
 
 export default function ResearchDashboard({ onRerunSearch }) {
+  const { notify } = useToast();
   const [stats, setStats] = useState(null);
   const [history, setHistory] = useState({ total: 0, items: [] });
   const [page, setPage] = useState(0);
@@ -195,8 +197,10 @@ export default function ResearchDashboard({ onRerunSearch }) {
       const nextPage = history.items.length === 1 && page > 0 ? page - 1 : page;
       if (nextPage !== page) setPage(nextPage);
       else await load(page);
+      notify('History entry deleted');
     } catch {
       setError('Could not delete that entry. Please try again.');
+      notify('Could not delete that entry', { variant: 'error' });
     } finally {
       setDeletingId(null);
     }
