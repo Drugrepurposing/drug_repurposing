@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { X, Layers } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Layers, Maximize2, Minimize2 } from 'lucide-react';
 import CompareRadar from './CompareRadar.jsx';
 import { DIMENSIONS, PROPERTIES, leaderIndex } from '../lib/compareDimensions.js';
 
@@ -23,12 +23,19 @@ import { DIMENSIONS, PROPERTIES, leaderIndex } from '../lib/compareDimensions.js
  * is decided when it is ticked and held until it is unticked, so removing the
  * first of three does not repaint the other two. That assignment lives in the
  * table's selection state; this component only renders the slots it is given.
+ *
+ * ENLARGING. Side by side is the right default - the radar and the bars answer
+ * each other, and separating them costs that. But a chart sized for a laptop
+ * is not a chart sized for a room, so the two views can be swapped for one
+ * wide column at nearly twice the scale. The radar has its own zoom and pan on
+ * top of this, for reading a few pixels of difference between two outlines.
  */
 
 const SERIES_VARS = ['var(--cmp-series-1)', 'var(--cmp-series-2)', 'var(--cmp-series-3)'];
 
 export default function MultiCompareModal({ selection, diseaseName, onClose }) {
   const closeRef = useRef(null);
+  const [enlarged, setEnlarged] = useState(false);
 
   // Escape closes, and focus starts on the close button rather than nowhere -
   // without this a keyboard user lands at the top of the page behind the modal.
@@ -53,7 +60,9 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
       aria-modal="true"
       aria-label={`Comparing ${candidates.map((c) => c.name).join(', ')}`}
     >
-      <div className="bg-surface w-full max-w-4xl rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={`bg-surface w-full rounded-xl border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[92vh] transition-[max-width] duration-200 ${
+        enlarged ? 'max-w-5xl' : 'max-w-4xl'
+      }`}>
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
@@ -70,6 +79,18 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
             </div>
           </div>
 
+          <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setEnlarged((value) => !value)}
+            aria-pressed={enlarged}
+            aria-label={enlarged ? 'Shrink the charts' : 'Enlarge the charts'}
+            title={enlarged ? 'Back to side by side' : 'Enlarge the charts'}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            {enlarged ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+
           <button
             ref={closeRef}
             type="button"
@@ -79,6 +100,7 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
           >
             <X className="w-4 h-4" />
           </button>
+          </div>
         </div>
 
         {/* The legend. Present because there are two or more series, and it is
@@ -98,12 +120,20 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
         </div>
 
         <div className="p-5 overflow-y-auto space-y-6">
-          <div className="grid lg:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
+          <div className={`grid gap-6 items-start ${
+            enlarged ? 'grid-cols-1' : 'lg:grid-cols-[280px_minmax(0,1fr)]'
+          }`}>
             <div>
-              <CompareRadar candidates={candidates} colours={colours} />
-              <p className="text-[10px] text-slate-400 text-center mt-1 leading-relaxed">
+              <CompareRadar
+                candidates={candidates}
+                colours={colours}
+                maxWidth={enlarged ? 560 : 320}
+              />
+              <p className="text-[10px] text-slate-400 text-center mt-1.5 leading-relaxed">
                 Shape only. Radar area grows with the square of the value, so read
                 the bars for the comparison.
+                <br />
+                Scroll or drag the plot to explore it, or use the buttons.
               </p>
             </div>
 
@@ -113,7 +143,9 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
                 return (
                   <div key={dimension.key}>
                     <div className="flex items-baseline justify-between gap-2 mb-1">
-                      <span className="text-[11px] font-semibold text-slate-700">
+                      <span className={`font-semibold text-slate-700 ${
+                        enlarged ? 'text-sm' : 'text-[11px]'
+                      }`}>
                         {dimension.label}
                       </span>
                       <span className="text-[10px] text-slate-400 truncate">
@@ -131,7 +163,9 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
                             title={`${candidate.name} · ${dimension.label}: ${dimension.display(candidate)}`}
                           >
                             <div
-                              className="h-[7px] flex-1 rounded-[4px] overflow-hidden"
+                              className={`flex-1 rounded-[4px] overflow-hidden ${
+                                enlarged ? 'h-[13px]' : 'h-[7px]'
+                              }`}
                               style={{ background: 'var(--viz-track)' }}
                             >
                               <div
@@ -146,7 +180,9 @@ export default function MultiCompareModal({ selection, diseaseName, onClose }) {
                                 Eighteen numbers beside eighteen bars is noise;
                                 the table below carries every value. */}
                             <span
-                              className={`text-[10px] font-mono tabular-nums w-24 shrink-0 text-right ${
+                              className={`font-mono tabular-nums w-24 shrink-0 text-right ${
+                                enlarged ? 'text-xs' : 'text-[10px]'
+                              } ${
                                 index === leader ? 'text-slate-700 font-semibold' : 'text-transparent'
                               }`}
                               aria-hidden={index !== leader}
