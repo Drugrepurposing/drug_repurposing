@@ -1,6 +1,25 @@
-import React, { useState } from 'react';
-import { Box, HelpCircle, ArrowRightLeft, CheckCircle2, Download, ThumbsUp, ThumbsDown, BookOpen, Sparkles } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Box, HelpCircle, ArrowRightLeft, CheckCircle2, Download, ThumbsUp, ThumbsDown, BookOpen, Sparkles, ArrowUp, ArrowDown, ChevronsUpDown, Filter } from 'lucide-react';
 import AnimatedPercent from './AnimatedPercent.jsx';
+
+/**
+ * Sortable columns.
+ *
+ * `direction` is the order a first click applies, chosen per column so that
+ * one click always shows "best first" - descending for scores, ASCENDING for
+ * docking energy, because Delta G is negative-is-better. A single shared
+ * default would quietly rank the weakest binders at the top of that column,
+ * which is the kind of error nobody notices in a demo and everybody notices in
+ * a viva.
+ */
+const SORT_COLUMNS = {
+  rank:    { label: 'Rank',       accessor: (c) => c.rank,             direction: 'asc'  },
+  name:    { label: 'Candidate',  accessor: (c) => c.name || '',       direction: 'asc'  },
+  gnn:     { label: 'GNN Score',  accessor: (c) => c.gnn_dti_score,    direction: 'desc' },
+  docking: { label: 'Docking',    accessor: (c) => c.docking_delta_g,  direction: 'asc'  },
+  safety:  { label: 'Safety',     accessor: (c) => c.safety_score,     direction: 'desc' },
+  overall: { label: 'Overall',    accessor: (c) => c.final_score ?? c.overall_score ?? c.gnn_dti_score, direction: 'desc' },
+};
 
 export default function CandidateTable({ 
   candidates, 
@@ -12,13 +31,51 @@ export default function CandidateTable({
   onFeedback 
 }) {
   const [feedbackState, setFeedbackState] = useState({});
+  const [sortKey, setSortKey] = useState('rank');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [validatedOnly, setValidatedOnly] = useState(false);
 
-  const handleRating = (drugId, rating) => {
+  const handleRating = (drugId, rating, drugName) => {
     setFeedbackState(prev => ({ ...prev, [drugId]: rating }));
-    if (onFeedback) onFeedback(drugId, rating);
+    if (onFeedback) onFeedback(drugId, rating, drugName);
   };
 
+  const toggleSort = (key) => {
+    if (key === sortKey) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(SORT_COLUMNS[key].direction);
+    }
+  };
+
+  const visible = useMemo(() => {
+    const source = validatedOnly
+      ? (candidates || []).filter((c) => c.validation_passed)
+      : (candidates || []);
+
+    const { accessor } = SORT_COLUMNS[sortKey] ?? SORT_COLUMNS.rank;
+    const factor = sortDirection === 'asc' ? 1 : -1;
+
+    // Copy before sorting: Array.prototype.sort mutates, and reordering the
+    // caller's array would silently change what the PDF export receives.
+    return [...source].sort((left, right) => {
+      const a = accessor(left);
+      const b = accessor(right);
+      // Missing values sort last in either direction rather than pretending
+      // to be zero, which would rank an absent score above a genuinely poor one.
+      if (a === null || a === undefined) return 1;
+      if (b === null || b === undefined) return -1;
+      if (typeof a === 'string' || typeof b === 'string') {
+        return String(a).localeCompare(String(b)) * factor;
+      }
+      return (a - b) * factor;
+    });
+  }, [candidates, sortKey, sortDirection, validatedOnly]);
+
   if (!candidates || candidates.length === 0) return null;
+
+  const validatedCount = candidates.filter((c) => c.validation_passed).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -30,7 +87,9 @@ export default function CandidateTable({
               Ranked Repurposing Candidates
             </h2>
             <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold border border-indigo-200">
-              {candidates.length} Candidate(s) Found
+              {visible.length === candidates.length
+                ? `${candidates.length} Candidate(s) Found`
+                : `Showing ${visible.length} of ${candidates.length}`}
             </span>
           </div>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">
@@ -38,13 +97,40 @@ export default function CandidateTable({
           </p>
         </div>
 
+        <div className="flex items-center gap-2.5">
+        {/* Filtering to validated candidates only. Disabled rather than hidden
+            when every candidate already passed: a control that vanishes is
+            more confusing than one that is visibly unavailable, and its label
+            still communicates how many passed. */}
         <button
-          onClick={() => onExportPDF(diseaseInfo?.name, diseaseInfo?.category, candidates)}
+          type="button"
+          onClick={() => setValidatedOnly((value) => !value)}
+          disabled={validatedCount === candidates.length}
+          aria-pressed={validatedOnly}
+          title={validatedCount === candidates.length
+            ? 'Every candidate passed biophysical validation'
+            : 'Show only candidates that passed biophysical validation'}
+          className={`px-3 py-2.5 rounded-xl border text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+            validatedOnly
+              ? 'bg-slate-900 border-slate-900 text-white'
+              : 'bg-surface border-slate-300 text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5 shrink-0" />
+          <span className="whitespace-nowrap">Validated only</span>
+          <span className={`tabular-nums ${validatedOnly ? 'text-slate-300' : 'text-slate-400'}`}>
+            {validatedCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => onExportPDF(diseaseInfo?.name, diseaseInfo?.category, visible)}
           className="px-4 py-2.5 rounded-xl bg-ok hover:bg-ok-hover text-white font-semibold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
         >
           <Download className="w-4 h-4" />
           <span>Download PDF Report</span>
         </button>
+        </div>
       </div>
 
       {/* Main Table */}
@@ -53,19 +139,19 @@ export default function CandidateTable({
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 text-slate-500 font-mono text-[11px] uppercase tracking-wider border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4 text-center">Rank</th>
-                <th className="py-3 px-4">Drug Candidate</th>
+                <SortableHeader label="Rank" columnKey="rank" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Drug Candidate" columnKey="name" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} align="left" />
                 <th className="py-3 px-4">Target Gene</th>
-                <th className="py-3 px-4 text-center">GNN Score</th>
-                <th className="py-3 px-4 text-center">Docking ΔG</th>
-                <th className="py-3 px-4 text-center">Safety</th>
-                <th className="py-3 px-4 text-center">Overall</th>
+                <SortableHeader label="GNN Score" columnKey="gnn" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Docking ΔG" columnKey="docking" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Safety" columnKey="safety" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Overall" columnKey="overall" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <th className="py-3 px-4 text-center">Validation</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-              {candidates.map((cand, rowIndex) => (
+              {visible.map((cand, rowIndex) => (
                 <tr
                   key={cand.id}
                   className="anim-rise hover:bg-slate-50/80 transition-colors"
@@ -187,16 +273,26 @@ export default function CandidateTable({
                       {/* Expert Feedback Thumbs */}
                       <div className="flex items-center gap-0.5 border-l border-slate-200 pl-1.5 ml-1">
                         <button
-                          onClick={() => handleRating(cand.id, 'up')}
-                          className={`p-1 rounded transition-colors ${
+                          onClick={() => handleRating(cand.id, 'up', cand.name)}
+                          /* An icon-only control with no accessible name is
+                             announced as just "button". These two also carry
+                             aria-pressed, so the current vote is conveyed by
+                             state rather than only by colour. */
+                          title={`Support ${cand.name} as a candidate`}
+                          aria-label={`Support ${cand.name} as a candidate`}
+                          aria-pressed={feedbackState[cand.id] === 'up'}
+                          className={`p-1 rounded transition-colors cursor-pointer ${
                             feedbackState[cand.id] === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:text-slate-600'
                           }`}
                         >
                           <ThumbsUp className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleRating(cand.id, 'down')}
-                          className={`p-1 rounded transition-colors ${
+                          onClick={() => handleRating(cand.id, 'down', cand.name)}
+                          title={`Reject ${cand.name} as a candidate`}
+                          aria-label={`Reject ${cand.name} as a candidate`}
+                          aria-pressed={feedbackState[cand.id] === 'down'}
+                          className={`p-1 rounded transition-colors cursor-pointer ${
                             feedbackState[cand.id] === 'down' ? 'text-rose-600 bg-rose-50' : 'text-slate-300 hover:text-slate-600'
                           }`}
                         >
@@ -212,5 +308,41 @@ export default function CandidateTable({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A column header that sorts.
+ *
+ * Rendered as a real <button> inside the <th>, not a click handler on the cell:
+ * that is what makes it reachable by keyboard and announced as actionable.
+ * `aria-sort` on the <th> tells a screen reader which column is ordering the
+ * table and in which direction - the piece that is almost always omitted, and
+ * without which the sort is invisible to anyone not looking at the arrow.
+ */
+function SortableHeader({ label, columnKey, sortKey, sortDirection, onSort, align = 'center' }) {
+  const active = sortKey === columnKey;
+  const ariaSort = active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none';
+  const Icon = active ? (sortDirection === 'asc' ? ArrowUp : ArrowDown) : ChevronsUpDown;
+
+  return (
+    <th className={`py-3 px-4 ${align === 'center' ? 'text-center' : 'text-left'}`} aria-sort={ariaSort}>
+      <button
+        type="button"
+        onClick={() => onSort(columnKey)}
+        title={`Sort by ${label}`}
+        /* The visible text is just the column name, which does not announce
+           that the control sorts. The accessible name says so, and still
+           CONTAINS the visible text - required by WCAG 2.5.3, so that someone
+           using voice control can say "Safety" and be understood. */
+        aria-label={`Sort by ${label}`}
+        className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider transition-colors cursor-pointer rounded px-1 -mx-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+          active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'
+        }`}
+      >
+        <span>{label}</span>
+        <Icon className={`w-3 h-3 shrink-0 ${active ? 'text-brand' : 'text-slate-400'}`} />
+      </button>
+    </th>
   );
 }

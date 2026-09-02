@@ -465,6 +465,76 @@ machinery above.
 
 ---
 
+## Interface
+
+Beyond the visual design, four pieces exist because they change how the
+application is *used* rather than how it looks.
+
+### Command palette — Ctrl/Cmd + K
+
+Opens from anywhere; type a few letters to run a disease through the pipeline,
+jump between tabs, switch theme, or sign out. Matching is a **subsequence**
+match, so `azd` finds "Alzheimer's Disease", and results are ordered by how
+early and how tightly the match lands rather than merely whether it occurs.
+
+It follows the WAI-ARIA combobox pattern: the input keeps focus throughout and
+owns the list through `aria-controls`, with `aria-activedescendant` pointing at
+the highlighted option. That is what lets a screen reader announce the moving
+selection while the user is still typing — roving focus cannot do this.
+
+The component is mounted only while open. Rendering `null` when closed kept the
+previous query alive, so the next thing typed was *appended* to it: opening,
+typing `azd`, closing, reopening and typing `Alzheimer` searched for
+`azdAlzheimer`. Mounting on open makes the state initialisers the reset.
+
+### Sortable, filterable results
+
+Sort by GNN score, docking ΔG, safety or overall; filter to validated
+candidates only. This is not presentation — it lets a reader interrogate the
+ranking instead of accepting it.
+
+The first click on each column applies the order that puts the *best* value
+first, which differs per column: descending for scores, **ascending** for
+docking ΔG, because binding energy is negative-is-better. A single shared
+default would quietly rank the weakest binders at the top of that column.
+
+`aria-sort` on the header conveys which column orders the table and in which
+direction — the part usually omitted, without which the sort is invisible to
+anyone not looking at the arrow. Missing values sort last in either direction
+rather than being treated as zero, which would rank an absent score above a
+genuinely poor one.
+
+### Confirmations
+
+Voting on a candidate previously wrote a row to the database and told the user
+nothing. An action with no visible result is indistinguishable from a broken
+button, and people click again — for a vote, exactly the wrong response.
+
+The confirmation reports whether the vote was **persisted**, not merely
+accepted, using the `stored` flag the endpoint already returned. Toasts are
+`aria-live="polite"` for confirmations and `role="alert"` for failures, carry an
+icon and text so nothing rests on colour, and pause their countdown while the
+pointer is over them. One interval counts every toast down rather than a timer
+each, because `setTimeout` cannot be paused.
+
+### Loading state
+
+A shaped skeleton, not a spinner. The search takes seconds; a spinner conveys
+only "wait", while a placeholder shows what is coming and holds the page height
+steady so results appear in place instead of shoving the layout down as the
+reader starts reading. The shimmer is drawn from the theme's own surface tokens,
+so it is correct in both themes with one definition, and `prefers-reduced-motion`
+stills it.
+
+### Accessibility defects fixed along the way
+
+Three controls had no accessible name at all and were announced as just
+"button": the explainability modal's close control, and the thumbs up/down
+votes. The votes now also carry `aria-pressed`, so the current vote is conveyed
+as state rather than only by colour.
+
+---
+
 ## Background Media
 
 The application renders a full-screen photographic (or video) backdrop behind

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LogIn, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '../context/auth-context.js';
+import { useToast } from '../context/toast-context.js';
 
 /**
  * The navbar's account control.
@@ -27,6 +28,7 @@ function initialsOf(name, email) {
 
 export default function UserMenu({ onSignInClick }) {
   const { user, isAuthenticated, initialising, logout } = useAuth();
+  const { notify } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -108,6 +110,7 @@ export default function UserMenu({ onSignInClick }) {
               onClick={() => {
                 setMenuOpen(false);
                 logout();
+                notify('Signed out', { variant: 'info' });
               }}
               className="w-full mt-1 px-2 py-2 rounded-lg text-left text-sm font-medium text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2 cursor-pointer"
             >

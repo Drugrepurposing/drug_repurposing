@@ -3,6 +3,7 @@ import {
   AlertCircle, Check, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck, User, X,
 } from 'lucide-react';
 import { useAuth } from '../context/auth-context.js';
+import { useToast } from '../context/toast-context.js';
 
 /**
  * Combined sign in / create account dialog.
@@ -31,6 +32,7 @@ const MIN_PASSWORD_LENGTH = 8;
 
 export default function AuthModal({ onClose, initialMode = 'login' }) {
   const { login, register } = useAuth();
+  const { notify } = useToast();
 
   const [mode, setMode] = useState(initialMode);
   const [fullName, setFullName] = useState('');
@@ -111,6 +113,10 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
 
     if (result.ok) {
       handleClose();
+      notify(
+        isRegister ? 'Account created' : `Signed in as ${result.user?.full_name || trimmedEmail}`,
+        { detail: 'Your searches are now saved to My Research' },
+      );
     } else {
       setError(result.error);
       setPassword('');
