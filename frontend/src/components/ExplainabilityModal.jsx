@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Sparkles, Cpu, ShieldCheck } from 'lucide-react';
+import SimilarCompounds from './SimilarCompounds.jsx';
 
 export default function ExplainabilityModal({ candidate, diseaseName, onClose }) {
   if (!candidate) return null;
@@ -24,7 +25,9 @@ export default function ExplainabilityModal({ candidate, diseaseName, onClose })
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -112,6 +115,11 @@ export default function ExplainabilityModal({ candidate, diseaseName, onClose })
               </p>
             </div>
           </div>
+
+          {/* Vector-space neighbours. "Why was this picked?" and "what else is
+              like it?" are the same question asked twice, so they belong on
+              the same panel. */}
+          <SimilarCompounds drugId={candidate.id} />
         </div>
 
         {/* Footer */}

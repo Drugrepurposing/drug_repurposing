@@ -1,12 +1,13 @@
 """
 Database schema.
 
-Three tables, each designed to be defended rather than merely to work:
+Four tables, each designed to be defended rather than merely to work:
 
-  users           accounts, with bcrypt password hashes (never plain passwords)
-  search_history  every pipeline run, attributable to a user when logged in
-  feedback        expert thumbs up/down, which /api/feedback previously accepted
-                  and silently discarded
+  users            accounts, with bcrypt password hashes (never plain passwords)
+  search_history   every pipeline run, attributable to a user when logged in
+  feedback         expert thumbs up/down, which /api/feedback previously accepted
+                   and silently discarded
+  drug_embeddings  one vector per compound, indexed for nearest-neighbour search
 
 Design notes worth knowing for a viva:
 
@@ -23,6 +24,7 @@ Design notes worth knowing for a viva:
 - Every table carries created_at; users also carries updated_at.
 """
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -36,6 +38,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.embeddings import EMBEDDING_DIM
 from app.db.session import Base
 
 
@@ -118,3 +121,42 @@ class Feedback(Base):
 
     def __repr__(self) -> str:
         return f"<Feedback {self.id} {self.drug_id} {self.rating}>"
+
+
+class DrugEmbedding(Base):
+    """
+    One vector per compound, for "what else is like this?".
+
+    The rest of the pipeline ranks drugs against a disease. This table answers
+    a different question - which compounds resemble a given one - and it is the
+    only place in the project where a vector is actually stored and searched
+    rather than merely computed and discarded.
+
+    Design notes:
+
+    - drug_id is the primary key, not a surrogate integer. The drug bank
+      already provides a stable identifier, and re-seeding must overwrite the
+      existing row rather than accumulate duplicates.
+    - target_gene and disease_key are duplicated out of the drug bank on
+      purpose. Denormalisation is usually a smell, but the whole point of this
+      table is to return neighbours in one query; joining back to an in-memory
+      Python list to label them would defeat that.
+    - model_version records which embedding function produced the row. Vectors
+      from different functions are not comparable, and without this there is no
+      way to tell a stale row from a current one.
+    """
+
+    __tablename__ = "drug_embeddings"
+
+    drug_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    drug_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_gene: Mapped[str] = mapped_column(String(120), nullable=True, index=True)
+    disease_key: Mapped[str] = mapped_column(String(120), nullable=True, index=True)
+    embedding: Mapped[list] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    created_at: Mapped["DateTime"] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<DrugEmbedding {self.drug_id} {self.drug_name}>"

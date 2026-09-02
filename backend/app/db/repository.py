@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from sqlalchemy import delete, func, select, text
 
+from app.core.embeddings import MODEL_VERSION
 from app.db.models import Feedback, SearchHistory, User
 from app.db.session import session_scope, strict_session
 
@@ -310,4 +311,129 @@ def history_stats(user_id: int, days: int = 14) -> dict:
                 "supported": votes.get("up", 0),
                 "rejected": votes.get("down", 0),
             },
+        }
+
+
+# ---------------------------------------------------------------------------
+# Vector similarity
+#
+# The only place in the project where a vector is actually stored and searched
+# rather than computed and thrown away.
+# ---------------------------------------------------------------------------
+
+# Two statements rather than one with a subquery, deliberately.
+#
+# pgvector's HNSW index is used when the ORDER BY compares the indexed column
+# against a CONSTANT. Written as `ORDER BY embedding <=> (SELECT embedding ...)`
+# the planner can fall back to a sequential scan and sort every row - which
+# still returns correct answers, so the mistake is invisible until the table is
+# large. Fetching the query vector first and passing it as a parameter keeps
+# the index in play.
+_FETCH_VECTOR_SQL = text("""
+    SELECT embedding, drug_name, target_gene, disease_key
+    FROM drug_embeddings
+    WHERE drug_id = :drug_id
+""")
+
+# `<=>` is cosine DISTANCE (0 = identical). Vectors are stored unit-length, so
+# similarity is simply 1 - distance and lands on a readable 0-1 scale.
+_NEIGHBOURS_SQL = text("""
+    SELECT
+        drug_id,
+        drug_name,
+        target_gene,
+        disease_key,
+        1 - (embedding <=> CAST(:query_vector AS vector)) AS similarity
+    FROM drug_embeddings
+    WHERE drug_id <> :drug_id
+      AND model_version = :model_version
+    ORDER BY embedding <=> CAST(:query_vector AS vector)
+    LIMIT :limit
+""")
+
+
+def _as_vector_literal(value) -> str:
+    """
+    pgvector's wire format: "[0.1,0.2,...]".
+
+    Raw SQL returns a vector column as whatever the driver makes of it - a
+    string on a plain psycopg2 connection, a list once pgvector's adapter is
+    registered. Both shapes appear depending on how the process was started, so
+    normalise here rather than assuming. Getting this wrong is quiet and ugly:
+    a string fed to list() is split into single characters, and the resulting
+    "vector" is 5,000 one-character entries.
+    """
+    if isinstance(value, str):
+        return value
+    return "[" + ",".join(repr(float(component)) for component in value) + "]"
+
+
+def embeddings_ready() -> dict:
+    """Whether similarity search can answer at all, and for how many compounds."""
+    try:
+        with strict_session() as session:
+            count = session.execute(
+                text("SELECT COUNT(*) FROM drug_embeddings WHERE model_version = :v"),
+                {"v": MODEL_VERSION},
+            ).scalar() or 0
+            return {"available": count > 0, "indexed_compounds": int(count),
+                    "model_version": MODEL_VERSION}
+    except Exception:
+        # The table may not exist (pgvector unavailable at migration time), or
+        # the database may be down. Neither should break /api/health.
+        return {"available": False, "indexed_compounds": 0, "model_version": MODEL_VERSION}
+
+
+def find_similar_drugs(drug_id: str, limit: int = 5) -> Optional[dict]:
+    """
+    Nearest neighbours of one compound in embedding space.
+
+    Returns None when the compound has no stored vector, which the endpoint
+    turns into a 404 - distinguishable from "similarity search is switched off
+    entirely", which is a different answer and a different fix.
+
+    Each neighbour carries the reasons it is close, taken from the columns
+    denormalised into this table. A bare similarity score is a number the
+    reader has to take on trust; "0.94, same target gene" is an explanation.
+    """
+    with strict_session() as session:
+        anchor = session.execute(_FETCH_VECTOR_SQL, {"drug_id": drug_id}).mappings().first()
+        if anchor is None:
+            return None
+
+        rows = session.execute(
+            _NEIGHBOURS_SQL,
+            {
+                "drug_id": drug_id,
+                "query_vector": _as_vector_literal(anchor["embedding"]),
+                "model_version": MODEL_VERSION,
+                "limit": max(1, min(limit, 25)),
+            },
+        ).mappings().all()
+
+        neighbours = []
+        for row in rows:
+            reasons = []
+            if anchor["target_gene"] and row["target_gene"] == anchor["target_gene"]:
+                reasons.append(f"Shares target {row['target_gene']}")
+            if anchor["disease_key"] and row["disease_key"] == anchor["disease_key"]:
+                reasons.append("Same indication area")
+            if not reasons:
+                reasons.append("Similar structure and omics profile")
+
+            neighbours.append({
+                "drug_id": row["drug_id"],
+                "drug_name": row["drug_name"],
+                "target_gene": row["target_gene"],
+                "disease_key": row["disease_key"],
+                "similarity": round(float(row["similarity"]), 4),
+                "reasons": reasons,
+            })
+
+        return {
+            "drug_id": drug_id,
+            "drug_name": anchor["drug_name"],
+            "target_gene": anchor["target_gene"],
+            "model_version": MODEL_VERSION,
+            "neighbours": neighbours,
         }

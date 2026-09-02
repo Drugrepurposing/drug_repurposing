@@ -8,11 +8,172 @@ Includes fuzzy string matching & live literature candidate extraction.
 import urllib.request
 import urllib.parse
 import json
+import os
 import re
 import difflib
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# LIVE ENRICHMENT CONTROLS
+#
+# The pipeline calls Europe PMC while a user waits. That is fine when the
+# network is healthy and a serious problem when it is not, because a socket
+# timeout does NOT bound the whole call: DNS resolution happens before the
+# socket exists, so a stalled resolver hangs for far longer than the timeout
+# passed to urlopen. A request that should take five seconds can take a
+# minute, and the user sees a frozen page.
+#
+# Three controls, in increasing order of bluntness:
+#
+#   run_with_budget()      a hard WALL-CLOCK cap. The call runs on a worker
+#                          thread and is abandoned if it overruns, whatever it
+#                          is stuck on - DNS included. This is the only one of
+#                          the three that survives a hanging resolver.
+#   _TTL cache             repeated queries never hit the network twice within
+#                          the window. A demo that searches the same disease
+#                          more than once pays the cost once.
+#   DISABLE_LIVE_APIS=1    skip external calls entirely and use the built-in
+#                          fallbacks. Insurance for a venue whose network
+#                          blocks outbound requests; every other feature -
+#                          screening, ranking, docking, history, similarity -
+#                          is unaffected, because none of them are online.
+# ---------------------------------------------------------------------------
+
+LIVE_APIS_ENABLED = os.getenv("DISABLE_LIVE_APIS", "").strip().lower() not in {
+    "1", "true", "yes", "on",
+}
+
+# Wall-clock cap per external call. Deliberately tighter than the socket
+# timeouts below, because it is the one that actually holds.
+LIVE_BUDGET_SECONDS = float(os.getenv("LIVE_API_BUDGET", "5"))
+
+# The validation lookup gates the whole request, so it gets a tighter cap than
+# the optional enrichment that follows it.
+VALIDATION_BUDGET_SECONDS = float(os.getenv("LIVE_API_VALIDATION_BUDGET", "2.5"))
+
+# How long a successful lookup stays warm.
+LIVE_CACHE_TTL_SECONDS = float(os.getenv("LIVE_API_CACHE_TTL", "900"))
+
+if not LIVE_APIS_ENABLED:
+    logger.warning(
+        "DISABLE_LIVE_APIS is set - external biomedical lookups are switched off. "
+        "The pipeline will use its built-in fallbacks."
+    )
+
+_CACHE: dict = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _cache_get(key):
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+    if entry is None:
+        return None
+    stored_at, value = entry
+    if time.time() - stored_at > LIVE_CACHE_TTL_SECONDS:
+        return None
+    return value
+
+
+def _cache_put(key, value) -> None:
+    with _CACHE_LOCK:
+        _CACHE[key] = (time.time(), value)
+
+
+class _BudgetedCall:
+    """
+    One external lookup on its own DAEMON thread.
+
+    A plain daemon thread rather than a ThreadPoolExecutor, and that is not a
+    stylistic preference. ThreadPoolExecutor registers an atexit hook that
+    JOINS its worker threads on interpreter shutdown, so one request stuck in a
+    hung socket would hold the whole process open - Ctrl+C would appear to do
+    nothing until the socket finally timed out. Daemon threads are abandoned at
+    exit, which is exactly the behaviour wanted for a best-effort lookup.
+    """
+
+    __slots__ = ("label", "function", "fallback", "args", "cache_key", "_thread", "_result")
+
+    def __init__(self, label, function, fallback, args):
+        self.label = label
+        self.function = function
+        self.fallback = fallback
+        self.args = args
+        self.cache_key = (label, args)
+        self._thread = None
+        self._result = fallback
+
+    def start(self):
+        """Begin the lookup, unless it is disabled or already cached."""
+        if not LIVE_APIS_ENABLED:
+            return self
+        cached = _cache_get(self.cache_key)
+        if cached is not None:
+            self._result = cached
+            return self
+
+        def target():
+            try:
+                value = self.function(*self.args)
+            except Exception as exc:
+                logger.warning("%s failed (%s) - continuing without it", self.label, exc)
+                return
+            self._result = value
+            _cache_put(self.cache_key, value)
+
+        self._thread = threading.Thread(
+            target=target, name=f"live-{self.label}", daemon=True
+        )
+        self._thread.start()
+        return self
+
+    def result(self, deadline: float):
+        """
+        Collect, waiting no later than `deadline` (a time.monotonic value).
+
+        An overrunning thread is abandoned, not cancelled - a blocked syscall
+        cannot be interrupted from outside. It finishes into the cache
+        eventually, so the next request benefits; this one moves on.
+        """
+        if self._thread is None:
+            return self._result
+
+        self._thread.join(timeout=max(deadline - time.monotonic(), 0.0))
+        if self._thread.is_alive():
+            logger.warning(
+                "%s exceeded its budget - continuing without it", self.label
+            )
+            return self.fallback
+        return self._result
+
+
+def run_with_budget(label: str, function, fallback, *args, budget: float = None):
+    """One lookup, bounded by wall clock. Returns `fallback` on timeout or error."""
+    deadline = time.monotonic() + (budget if budget is not None else LIVE_BUDGET_SECONDS)
+    return _BudgetedCall(label, function, fallback, args).start().result(deadline)
+
+
+def run_parallel_with_budget(calls, budget: float = None):
+    """
+    Several independent lookups at once, under ONE shared wall-clock budget.
+
+    Started together and collected against a single deadline, so the caller
+    waits for the slowest rather than the sum. Returns results in the order the
+    calls were given.
+
+    `calls` is a sequence of (label, function, fallback, args) tuples.
+    """
+    deadline = time.monotonic() + (budget if budget is not None else LIVE_BUDGET_SECONDS)
+    pending = [
+        _BudgetedCall(label, function, fallback, args).start()
+        for label, function, fallback, args in calls
+    ]
+    return [call.result(deadline) for call in pending]
 
 MASTER_DISEASE_DICTIONARY = [
     "Alzheimer's Disease",

@@ -1,6 +1,7 @@
+import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -14,6 +15,8 @@ from app.core.pdf_generator import ReportGenerator
 from app.core.live_api import LiveBiomedicalAPI
 from app.db import repository
 from app.db.session import check_connection, is_database_enabled
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 orchestrator = MultiAgentOrchestrator()
@@ -87,6 +90,7 @@ def health_check():
         "institution": "GRIET Hyderabad",
         "database": database,
         "persistence": "enabled" if is_database_enabled() else "disabled",
+        "vector_search": repository.embeddings_ready(),
     }
 
 @router.get("/diseases")
@@ -139,6 +143,44 @@ def get_drug_by_id(drug_id: str):
     if not drug:
         raise HTTPException(status_code=404, detail="Drug not found")
     return drug
+
+@router.get("/drugs/{drug_id}/similar")
+def get_similar_drugs(drug_id: str, limit: int = Query(5, ge=1, le=25)):
+    """
+    Compounds nearest to this one in embedding space.
+
+    Answers a question the rest of the pipeline cannot: not "which drugs score
+    well for this disease" but "which drugs resemble THIS one". That comparison
+    is a vector distance, resolved by an approximate-nearest-neighbour index in
+    PostgreSQL rather than by comparing every pair in Python.
+
+    Three distinct outcomes, deliberately not collapsed into one error:
+      503  similarity search is unavailable (no database, or not yet seeded)
+      404  this compound has no stored vector
+      200  neighbours, each with the reason it is close
+    """
+    status_info = repository.embeddings_ready()
+    if not status_info["available"]:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Similarity search is unavailable. Run "
+                "'python -m app.scripts.build_embeddings' to populate the vector index."
+            ),
+        )
+
+    try:
+        result = repository.find_similar_drugs(drug_id, limit=limit)
+    except Exception:
+        logger.exception("Similarity lookup failed for %s", drug_id)
+        raise HTTPException(status_code=503, detail="Similarity search is temporarily unavailable.")
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="No embedding stored for that compound")
+
+    result["indexed_compounds"] = status_info["indexed_compounds"]
+    return result
+
 
 @router.get("/drugs/{drug_id}/pdb")
 def get_drug_pdb_structure(drug_id: str):

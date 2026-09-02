@@ -18,7 +18,12 @@ from app.core.docking_engine import DockingEngine
 from app.core.pathway_engine import PathwayEngine
 from app.core.nlp_engine import NLPEngine
 from app.core.ranking_engine import RankingEngine
-from app.core.live_api import LiveBiomedicalAPI
+from app.core.live_api import (
+    VALIDATION_BUDGET_SECONDS,
+    LiveBiomedicalAPI,
+    run_parallel_with_budget,
+    run_with_budget,
+)
 
 class MultiAgentOrchestrator:
     def __init__(self):
@@ -37,8 +42,22 @@ class MultiAgentOrchestrator:
         start_time = time.time()
         query_clean = disease_query.strip().lower()
         
-        # Validate if the query is a valid medical condition
-        is_valid_query = self.live_api.validate_disease_query(disease_query)
+        # Validate if the query is a valid medical condition.
+        # Wrapped in a wall-clock budget: this gates the whole request, so a
+        # stalled network here would block the pipeline before it even starts.
+        # A tighter budget than the enrichment calls, for two reasons: this one
+        # is sequential (everything else waits behind it), and its fallback is
+        # safe - assuming a disease IS valid when the network is unavailable
+        # costs nothing, whereas rejecting a real one would break the demo.
+        # Most common diseases match a local keyword list first and never touch
+        # the network at all.
+        is_valid_query = run_with_budget(
+            "validate_disease_query",
+            self.live_api.validate_disease_query,
+            True,
+            disease_query,
+            budget=VALIDATION_BUDGET_SECONDS,
+        )
         if not is_valid_query:
             suggestions = self.live_api.get_fuzzy_suggestions(disease_query)
             return {
@@ -55,11 +74,33 @@ class MultiAgentOrchestrator:
                 matched_key = key
                 break
         
-        # Live Literature Query from Europe PMC / PubMed
-        live_lit_data = self.live_api.fetch_live_disease_targets(disease_query)
+        # Live literature enrichment, from Europe PMC / PubMed.
+        #
+        # These two lookups are independent, so they run CONCURRENTLY rather
+        # than one after the other. Sequentially their timeouts add up; in
+        # parallel the pipeline waits for the slower of the two, not for both.
+        # Both are optional: if either overruns its budget the pipeline
+        # continues with an empty result rather than failing the search, since
+        # screening, ranking and docking do not depend on them.
+        # The fallback for the targets lookup mirrors the shape that function
+        # returns on its own failure path, keys included. A bare {} would be
+        # "correct" as an empty value and would crash the log line below on a
+        # missing key - the failure mode only ever appears when the network
+        # does, which is precisely when nobody wants a second bug.
+        offline_targets = {
+            "disease_name": disease_query.strip().title(),
+            "hit_count": 0,
+            "sample_publications": [],
+        }
 
-        # Stream 1: Mine live PubMed / Gemini clinical literature candidates
-        lit_candidates = self.live_api.fetch_live_literature_candidates(disease_query)
+        live_lit_data, lit_candidates = run_parallel_with_budget([
+            ("fetch_live_disease_targets",
+             self.live_api.fetch_live_disease_targets, offline_targets, (disease_query,)),
+            ("fetch_live_literature_candidates",
+             self.live_api.fetch_live_literature_candidates, [], (disease_query,)),
+        ])
+        live_lit_data = {**offline_targets, **(live_lit_data or {})}
+        lit_candidates = lit_candidates or []
 
         # Stage 1: Vectorized Matrix Screening across 100,000+ (1 Lakh+) Chemical Compounds in 24ms
         screened_100k_shortlist = ONE_LAKH_DRUG_BANK.screen_100k_compounds(disease_query, top_k=20)
